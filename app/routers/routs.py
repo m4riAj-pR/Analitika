@@ -2,7 +2,6 @@ from fastapi import APIRouter
 from app.schemas.usuarios import Usuario
 from app.schemas.campanas import Campana
 from app.schemas.canales import Canal
-from app.schemas.campanas_canales import CampanaCanal
 from app.schemas.clics import Clic
 from app.schemas.conversiones import Conversion
 
@@ -86,26 +85,6 @@ def delete_canal(id: int):
     delete_canal_service(id)
     return {"ok": True}
 
-# CAMPANAS_CANALES ----------------
-
-@router.post("/campanas_canales")
-def create_campana_canal(data: CampanaCanal):
-    insert_campana_canal(data)
-    return {"ok": True}
-
-@router.get("/campanas_canales")
-def get_campanas_canales():
-    return read_table("campanas_canales")
-
-@router.put("/campanas_canales/{id}")
-def update_campana_canal(id: int, data: CampanaCanal):
-    update_campana_canal_service(id, data)
-    return {"ok": True}
-
-@router.delete("/campanas_canales/{id}")
-def delete_campana_canal(id: int):
-    delete_campana_canal_service(id)
-    return {"ok": True}
 
 # CLICS ----------------
 

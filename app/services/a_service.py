@@ -5,7 +5,6 @@ import pymysql
 from app.schemas.usuarios import Usuario
 from app.schemas.campanas import Campana
 from app.schemas.canales import Canal
-from app.schemas.campanas_canales import CampanaCanal
 from app.schemas.clics import Clic
 from app.schemas.conversiones import Conversion
 #--------
@@ -104,34 +103,6 @@ def delete_canal_service(id_canal: int):
         run_query("DELETE FROM canales WHERE id_canal=%s", (id_canal,))
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"No se puede eliminar canal: {e}")
-
-
-# --------------------
-
-def insert_campana_canal(data: CampanaCanal):
-    try:
-        run_query("INSERT INTO campanas_canales (campana_id, canal_id) VALUES (%s, %s)", (data.campana_id, data.canal_id))
-    except pymysql.err.IntegrityError as e:
-        raise HTTPException(status_code=400, detail=f"Error al insertar campaña-canal: {e}")
-
-def update_campana_canal_service(old_campana_id: int, old_canal_id: int, data: CampanaCanal):
-    try:
-        run_query(
-            "UPDATE campanas_canales SET campana_id=%s, canal_id=%s WHERE campana_id=%s AND canal_id=%s",
-            (data.campana_id, data.canal_id, old_campana_id, old_canal_id)
-        )
-    except pymysql.err.IntegrityError as e:
-        raise HTTPException(status_code=400, detail=f"Error al actualizar campaña-canal: {e}")
-
-def delete_campana_service(id_campana: int):
-    result1 = run_query("SELECT COUNT(*) AS total FROM campanas_canales WHERE campana_id=%s", (id_campana,), fetch=True)
-    result2 = run_query("SELECT COUNT(*) AS total FROM clics WHERE campana_id=%s", (id_campana,), fetch=True)
-    result3 = run_query("SELECT COUNT(*) AS total FROM conversiones WHERE campana_id=%s", (id_campana,), fetch=True)
-
-    if result1[0]['total'] > 0 or result2[0]['total'] > 0 or result3[0]['total'] > 0:
-        raise HTTPException(status_code=400, detail="No se puede eliminar: existen registros asociados a esta campaña.")
-
-    run_query("DELETE FROM campanas WHERE id_campana=%s", (id_campana,))
 
 
 # --------------------
