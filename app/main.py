@@ -1,6 +1,6 @@
 from fastapi import FastAPI
-from routers import routs as route
+from app.routers.routs import router
 
 app = FastAPI(title="Analitika API")
 
-app.include_router(route)
+app.include_router(router)
