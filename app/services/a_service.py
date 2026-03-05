@@ -1,5 +1,5 @@
 from app.db.database import run_query
-from fastapi import HTTPException, status
+from fastapi import HTTPException,status
 import pymysql
 
 from app.schemas.usuarios import Usuario
@@ -28,10 +28,13 @@ def update_usuario_service(id_usuario: int, data: Usuario):
         raise HTTPException(status_code=400, detail=f"Error al actualizar usuario: {e}")
 
 def delete_usuario_service(id_usuario: int):
-    try:
-        run_query("DELETE FROM usuarios WHERE id_usuario=%s", (id_usuario,))
-    except pymysql.err.IntegrityError as e:
-        raise HTTPException(status_code=400, detail=f"No se puede eliminar usuario: {e}")
+    result = run_query("SELECT COUNT(*) AS total FROM campanas WHERE usuario_id=%s", (id_usuario,), fetch=True)
+    if result[0]['total'] > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede eliminar el usuario: tiene campañas asociadas."
+        )
+    run_query("DELETE FROM usuarios WHERE id_usuario=%s", (id_usuario,))
 
 
 # --------------------
@@ -54,10 +57,29 @@ def update_campana_service(id_campana: int, data: Campana):
         raise HTTPException(status_code=400, detail=f"Error al actualizar campaña: {e}")
 
 def delete_campana_service(id_campana: int):
-    try:
-        run_query("DELETE FROM campanas WHERE id_campana=%s", (id_campana,))
-    except pymysql.err.IntegrityError as e:
-        raise HTTPException(status_code=400, detail=f"No se puede eliminar campaña: {e}")
+
+    result_rel = run_query(
+        "SELECT COUNT(*) AS total FROM campanas_canales WHERE campana_id=%s",
+        (id_campana,), fetch=True
+    )
+
+    result_clics = run_query(
+        "SELECT COUNT(*) AS total FROM clics WHERE campana_id=%s",
+        (id_campana,), fetch=True
+    )
+ 
+    result_conversiones = run_query(
+        "SELECT COUNT(*) AS total FROM conversiones WHERE campana_id=%s",
+        (id_campana,), fetch=True
+    )
+
+    if result_rel[0]['total'] > 0 or result_clics[0]['total'] > 0 or result_conversiones[0]['total'] > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede eliminar la campaña: existen registros asociados (canales, clics o conversiones)."
+        )
+
+    run_query("DELETE FROM campanas WHERE id_campana=%s", (id_campana,))
 
 
 # --------------------
@@ -75,7 +97,6 @@ def update_canal_service(id_canal: int, data: Canal):
         raise HTTPException(status_code=400, detail=f"Error al actualizar canal: {e}")
 
 def delete_canal_service(id_canal: int):
-    # Verificar FK en campanas_canales
     result = run_query("SELECT COUNT(*) AS total FROM campanas_canales WHERE canal_id=%s", (id_canal,), fetch=True)
     if result[0]['total'] > 0:
         raise HTTPException(status_code=400, detail="No se puede eliminar: existen campañas asociadas.")
@@ -102,11 +123,15 @@ def update_campana_canal_service(old_campana_id: int, old_canal_id: int, data: C
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al actualizar campaña-canal: {e}")
 
-def delete_campana_canal_service(campana_id: int, canal_id: int):
-    try:
-        run_query("DELETE FROM campanas_canales WHERE campana_id=%s AND canal_id=%s", (campana_id, canal_id))
-    except pymysql.err.IntegrityError as e:
-        raise HTTPException(status_code=400, detail=f"No se puede eliminar campaña-canal: {e}")
+def delete_campana_service(id_campana: int):
+    result1 = run_query("SELECT COUNT(*) AS total FROM campanas_canales WHERE campana_id=%s", (id_campana,), fetch=True)
+    result2 = run_query("SELECT COUNT(*) AS total FROM clics WHERE campana_id=%s", (id_campana,), fetch=True)
+    result3 = run_query("SELECT COUNT(*) AS total FROM conversiones WHERE campana_id=%s", (id_campana,), fetch=True)
+
+    if result1[0]['total'] > 0 or result2[0]['total'] > 0 or result3[0]['total'] > 0:
+        raise HTTPException(status_code=400, detail="No se puede eliminar: existen registros asociados a esta campaña.")
+
+    run_query("DELETE FROM campanas WHERE id_campana=%s", (id_campana,))
 
 
 # --------------------
