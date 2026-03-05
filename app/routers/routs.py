@@ -23,7 +23,7 @@ VALID_TABLES = {
 def root():
     return {"message": "API conectada a analitika_db"}
 
-# ---------------- RUTAS USUARIOS ----------------
+# USUARIOS ----------------
 
 @router.post("/usuarios")
 def create_usuario(data: Usuario):
@@ -44,7 +44,7 @@ def delete_usuario(id: int):
     delete_usuario_service(id)
     return {"ok": True}
 
-# ---------------- RUTAS CAMPANAS ----------------
+# CAMPANAS ----------------
 
 @router.post("/campanas")
 def create_campana(data: Campana):
@@ -65,7 +65,7 @@ def delete_campana(id: int):
     delete_campana_service(id)
     return {"ok": True}
 
-# ---------------- RUTAS CANALES ----------------
+# CANALES ----------------
 
 @router.post("/canales")
 def create_canal(data: Canal):
@@ -86,7 +86,7 @@ def delete_canal(id: int):
     delete_canal_service(id)
     return {"ok": True}
 
-# ---------------- RUTAS CAMPANAS_CANALES ----------------
+# CAMPANAS_CANALES ----------------
 
 @router.post("/campanas_canales")
 def create_campana_canal(data: CampanaCanal):
@@ -107,7 +107,7 @@ def delete_campana_canal(id: int):
     delete_campana_canal_service(id)
     return {"ok": True}
 
-# ---------------- RUTAS CLICS ----------------
+# CLICS ----------------
 
 @router.post("/clics")
 def create_clic(data: Clic):
@@ -128,7 +128,7 @@ def delete_clic(id: int):
     delete_clic_service(id)
     return {"ok": True}
 
-# ---------------- RUTAS CONVERSIONES ----------------
+# CONVERSIONES ----------------
 
 @router.post("/conversiones")
 def create_conversion(data: Conversion):
