@@ -1,27 +1,22 @@
 import os
-import psycopg2
-from psycopg2.pool import SimpleConnectionPool
-from psycopg2.extras import RealDictCursor
+import pymysql
+from pymysql.cursors import DictCursor
 
-pool = SimpleConnectionPool(
-    1, 10,
+connection = pymysql.connect(
     host=os.getenv("DB_HOST", "localhost"),
+    user=os.getenv("DB_USER", "root"),
+    password=os.getenv("DB_PASSWORD", ""),
     database=os.getenv("DB_NAME", "analitika_db"),
-    user=os.getenv("DB_USER", "postgres"),
-    password=os.getenv("DB_PASSWORD"),
-    port=os.getenv("DB_PORT", 5432)
+    port=int(os.getenv("DB_PORT", 3306)),
+    cursorclass=DictCursor
 )
 
 
 def run_query(sql: str, params=None, fetch: bool = False):
-    conn = pool.getconn()
-    try:
-        cur = conn.cursor(cursor_factory=RealDictCursor)
+    with connection.cursor() as cur:
         cur.execute(sql, params)
 
         if fetch:
             return cur.fetchall()
 
-        conn.commit()
-    finally:
-        pool.putconn(conn)
+        connection.commit()
