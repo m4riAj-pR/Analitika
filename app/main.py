@@ -3,7 +3,7 @@ from app.routers import routs
 
 app = FastAPI(
     title="Analitika API",
-    description="API para gestionar usuarios, campañas, canales, clics y conversiones",
+    description="API para gestionar campañas digitales",
     version="1.0.0"
 )
 
