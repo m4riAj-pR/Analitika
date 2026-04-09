@@ -1,144 +1,375 @@
 from app.db.database import run_query
-from fastapi import HTTPException,status
+from fastapi import HTTPException, status
 import pymysql
 
-from app.schemas.usuarios import Usuario
-from app.schemas.campanas import Campana
-from app.schemas.canales import Canal
-from app.schemas.clics import Clic
-from app.schemas.conversiones import Conversion
-#--------
-def insert_usuario(data: Usuario):
+from app.schemas.persons import Person
+from app.schemas.role import Role
+from app.schemas.permissions import Permission
+from app.schemas.role_has_permissions import RoleHasPermission
+from app.schemas.companies import Company
+from app.schemas.users import User
+from app.schemas.user_company import UserCompany
+from app.schemas.campaigns import Campaign
+from app.schemas.channels import Channel
+from app.schemas.tracking_links import TrackingLink
+from app.schemas.clicks import Click
+from app.schemas.conversions import Conversion
+
+
+# ---------------------------------------------------------------
+# PERSONS
+# ---------------------------------------------------------------
+def insert_person(data: Person):
     try:
         run_query(
-            "INSERT INTO usuarios (email, nombres, apellidos, rol, password_hash) VALUES (%s, %s, %s, %s, %s)",
-            (data.email, data.nombres, data.apellidos, data.rol, data.password_hash)
+            "INSERT INTO persons (name, lastname, email, phone) VALUES (%s, %s, %s, %s)",
+            (data.name, data.lastname, data.email, data.phone)
+        )
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"Error al insertar persona: {e}")
+
+def update_person_service(id_person: int, data: Person):
+    try:
+        run_query(
+            "UPDATE persons SET name=%s, lastname=%s, email=%s, phone=%s WHERE id_person=%s",
+            (data.name, data.lastname, data.email, data.phone, id_person)
+        )
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"Error al actualizar persona: {e}")
+
+def delete_person_service(id_person: int):
+    result = run_query(
+        "SELECT COUNT(*) AS total FROM users WHERE id_person=%s",
+        (id_person,), fetch=True
+    )
+    if result[0]['total'] > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede eliminar la persona: tiene usuarios asociados."
+        )
+    run_query("DELETE FROM persons WHERE id_person=%s", (id_person,))
+
+
+# ---------------------------------------------------------------
+# ROLE
+# ---------------------------------------------------------------
+def insert_role(data: Role):
+    try:
+        run_query("INSERT INTO role (name) VALUES (%s)", (data.name,))
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"Error al insertar rol: {e}")
+
+def update_role_service(id_role: int, data: Role):
+    try:
+        run_query("UPDATE role SET name=%s WHERE id_role=%s", (data.name, id_role))
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"Error al actualizar rol: {e}")
+
+def delete_role_service(id_role: int):
+    result = run_query(
+        "SELECT COUNT(*) AS total FROM users WHERE id_role=%s",
+        (id_role,), fetch=True
+    )
+    if result[0]['total'] > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede eliminar el rol: tiene usuarios asociados."
+        )
+    run_query("DELETE FROM role WHERE id_role=%s", (id_role,))
+
+
+# ---------------------------------------------------------------
+# PERMISSIONS
+# ---------------------------------------------------------------
+def insert_permission(data: Permission):
+    try:
+        run_query(
+            "INSERT INTO permissions (name, description) VALUES (%s, %s)",
+            (data.name, data.description)
+        )
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"Error al insertar permiso: {e}")
+
+def update_permission_service(id_permissions: int, data: Permission):
+    try:
+        run_query(
+            "UPDATE permissions SET name=%s, description=%s WHERE id_permissions=%s",
+            (data.name, data.description, id_permissions)
+        )
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"Error al actualizar permiso: {e}")
+
+def delete_permission_service(id_permissions: int):
+    result = run_query(
+        "SELECT COUNT(*) AS total FROM role_has_permissions WHERE id_permission=%s",
+        (id_permissions,), fetch=True
+    )
+    if result[0]['total'] > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede eliminar el permiso: está asignado a uno o más roles."
+        )
+    run_query("DELETE FROM permissions WHERE id_permissions=%s", (id_permissions,))
+
+
+# ---------------------------------------------------------------
+# ROLE_HAS_PERMISSIONS
+# ---------------------------------------------------------------
+def insert_role_permission(data: RoleHasPermission):
+    try:
+        run_query(
+            "INSERT INTO role_has_permissions (id_role, id_permission) VALUES (%s, %s)",
+            (data.id_role, data.id_permission)
+        )
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"Error al asignar permiso al rol: {e}")
+
+def delete_role_permission_service(id_role_permission: int):
+    run_query(
+        "DELETE FROM role_has_permissions WHERE id_role_permission=%s",
+        (id_role_permission,)
+    )
+
+
+# ---------------------------------------------------------------
+# COMPANIES
+# ---------------------------------------------------------------
+def insert_company(data: Company):
+    try:
+        run_query(
+            "INSERT INTO companies (id_user, name) VALUES (%s, %s)",
+            (data.id_user, data.name)
+        )
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"Error al insertar empresa: {e}")
+
+def update_company_service(id_company: int, data: Company):
+    try:
+        run_query(
+            "UPDATE companies SET id_user=%s, name=%s WHERE id_company=%s",
+            (data.id_user, data.name, id_company)
+        )
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"Error al actualizar empresa: {e}")
+
+def delete_company_service(id_company: int):
+    result_users = run_query(
+        "SELECT COUNT(*) AS total FROM users WHERE id_company=%s",
+        (id_company,), fetch=True
+    )
+    result_campaigns = run_query(
+        "SELECT COUNT(*) AS total FROM campaigns WHERE id_company=%s",
+        (id_company,), fetch=True
+    )
+    if result_users[0]['total'] > 0 or result_campaigns[0]['total'] > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede eliminar la empresa: tiene usuarios o campañas asociadas."
+        )
+    run_query("DELETE FROM companies WHERE id_company=%s", (id_company,))
+
+
+# ---------------------------------------------------------------
+# USERS
+# ---------------------------------------------------------------
+def insert_user(data: User):
+    try:
+        run_query(
+            "INSERT INTO users (id_person, id_company, id_role, password_hash) VALUES (%s, %s, %s, %s)",
+            (data.id_person, data.id_company, data.id_role, data.password_hash)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al insertar usuario: {e}")
 
-def update_usuario_service(id_usuario: int, data: Usuario):
+def update_user_service(id_user: int, data: User):
     try:
         run_query(
-            "UPDATE usuarios SET email=%s, nombres=%s, apellidos=%s, rol=%s, password_hash=%s WHERE id_usuario=%s",
-            (data.email, data.nombres, data.apellidos, data.rol, data.password_hash, id_usuario)
+            "UPDATE users SET id_person=%s, id_company=%s, id_role=%s, password_hash=%s WHERE id_user=%s",
+            (data.id_person, data.id_company, data.id_role, data.password_hash, id_user)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al actualizar usuario: {e}")
 
-def delete_usuario_service(id_usuario: int):
-    result = run_query("SELECT COUNT(*) AS total FROM campanas WHERE usuario_id=%s", (id_usuario,), fetch=True)
+def delete_user_service(id_user: int):
+    result = run_query(
+        "SELECT COUNT(*) AS total FROM campaigns WHERE id_company IN (SELECT id_company FROM users WHERE id_user=%s)",
+        (id_user,), fetch=True
+    )
     if result[0]['total'] > 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se puede eliminar el usuario: tiene campañas asociadas."
+            detail="No se puede eliminar el usuario: tiene campañas asociadas a su empresa."
         )
-    run_query("DELETE FROM usuarios WHERE id_usuario=%s", (id_usuario,))
+    run_query("DELETE FROM users WHERE id_user=%s", (id_user,))
 
 
-# --------------------
-def insert_campana(data: Campana):
+# ---------------------------------------------------------------
+# USER_COMPANY
+# ---------------------------------------------------------------
+def insert_user_company(data: UserCompany):
     try:
         run_query(
-            "INSERT INTO campanas (usuario_id, nombre, presupuesto, fecha_inicio, fecha_fin) VALUES (%s, %s, %s, %s, %s)",
-            (data.usuario_id, data.nombre, float(data.presupuesto), data.fecha_inicio, data.fecha_fin)
+            "INSERT INTO user_company (id_user, id_company) VALUES (%s, %s)",
+            (data.id_user, data.id_company)
+        )
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"Error al asociar usuario a empresa: {e}")
+
+def delete_user_company_service(id_user_company: int):
+    run_query(
+        "DELETE FROM user_company WHERE id_user_company=%s",
+        (id_user_company,)
+    )
+
+
+# ---------------------------------------------------------------
+# CAMPAIGNS
+# ---------------------------------------------------------------
+def insert_campaign(data: Campaign):
+    try:
+        run_query(
+            "INSERT INTO campaigns (id_company, name, description, status, start_date, end_date) VALUES (%s, %s, %s, %s, %s, %s)",
+            (data.id_company, data.name, data.description, data.status, data.start_date, data.end_date)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al insertar campaña: {e}")
 
-def update_campana_service(id_campana: int, data: Campana):
+def update_campaign_service(id_campaign: int, data: Campaign):
     try:
         run_query(
-            "UPDATE campanas SET usuario_id=%s, nombre=%s, presupuesto=%s, fecha_inicio=%s, fecha_fin=%s WHERE id_campana=%s",
-            (data.usuario_id, data.nombre, float(data.presupuesto), data.fecha_inicio, data.fecha_fin, id_campana)
+            "UPDATE campaigns SET id_company=%s, name=%s, description=%s, status=%s, start_date=%s, end_date=%s WHERE id_campaign=%s",
+            (data.id_company, data.name, data.description, data.status, data.start_date, data.end_date, id_campaign)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al actualizar campaña: {e}")
 
-def delete_campana_service(id_campana: int):
-
-    result_rel = run_query(
-        "SELECT COUNT(*) AS total FROM campanas_canales WHERE campana_id=%s",
-        (id_campana,), fetch=True
+def delete_campaign_service(id_campaign: int):
+    result_links = run_query(
+        "SELECT COUNT(*) AS total FROM tracking_links WHERE id_campaign=%s",
+        (id_campaign,), fetch=True
     )
-
-    result_clics = run_query(
-        "SELECT COUNT(*) AS total FROM clics WHERE campana_id=%s",
-        (id_campana,), fetch=True
+    result_conversions = run_query(
+        "SELECT COUNT(*) AS total FROM conversions WHERE id_campaign=%s",
+        (id_campaign,), fetch=True
     )
- 
-    result_conversiones = run_query(
-        "SELECT COUNT(*) AS total FROM conversiones WHERE campana_id=%s",
-        (id_campana,), fetch=True
-    )
-
-    if result_rel[0]['total'] > 0 or result_clics[0]['total'] > 0 or result_conversiones[0]['total'] > 0:
+    if result_links[0]['total'] > 0 or result_conversions[0]['total'] > 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se puede eliminar la campaña: existen registros asociados (canales, clics o conversiones)."
+            detail="No se puede eliminar la campaña: existen tracking links o conversiones asociadas."
         )
+    run_query("DELETE FROM campaigns WHERE id_campaign=%s", (id_campaign,))
 
-    run_query("DELETE FROM campanas WHERE id_campana=%s", (id_campana,))
 
-
-# --------------------
-
-def insert_canal(data: Canal):
+# ---------------------------------------------------------------
+# CHANNELS
+# ---------------------------------------------------------------
+def insert_channel(data: Channel):
     try:
-        run_query("INSERT INTO canales (nombre) VALUES (%s)", (data.nombre,))
+        run_query(
+            "INSERT INTO channels (name, description) VALUES (%s, %s)",
+            (data.name, data.description)
+        )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al insertar canal: {e}")
 
-def update_canal_service(id_canal: int, data: Canal):
+def update_channel_service(id_channel: int, data: Channel):
     try:
-        run_query("UPDATE canales SET nombre=%s WHERE id_canal=%s", (data.nombre, id_canal))
+        run_query(
+            "UPDATE channels SET name=%s, description=%s WHERE id_channel=%s",
+            (data.name, data.description, id_channel)
+        )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al actualizar canal: {e}")
 
-def delete_canal_service(id_canal: int):
-    result = run_query("SELECT COUNT(*) AS total FROM campanas_canales WHERE canal_id=%s", (id_canal,), fetch=True)
+def delete_channel_service(id_channel: int):
+    result = run_query(
+        "SELECT COUNT(*) AS total FROM tracking_links WHERE id_channel=%s",
+        (id_channel,), fetch=True
+    )
     if result[0]['total'] > 0:
-        raise HTTPException(status_code=400, detail="No se puede eliminar: existen campañas asociadas.")
-    try:
-        run_query("DELETE FROM canales WHERE id_canal=%s", (id_canal,))
-    except pymysql.err.IntegrityError as e:
-        raise HTTPException(status_code=400, detail=f"No se puede eliminar canal: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede eliminar el canal: tiene tracking links asociados."
+        )
+    run_query("DELETE FROM channels WHERE id_channel=%s", (id_channel,))
 
 
-# --------------------
-
-def insert_clic(data: Clic):
+# ---------------------------------------------------------------
+# TRACKING LINKS
+# ---------------------------------------------------------------
+def insert_tracking_link(data: TrackingLink):
     try:
         run_query(
-            "INSERT INTO clics (campana_id, fecha_hora, dispositivo, canal_id) VALUES (%s, %s, %s, %s)",
-            (data.campana_id, data.fecha_hora, data.dispositivo, data.canal_id)
+            "INSERT INTO tracking_links (id_campaign, id_channel, destination) VALUES (%s, %s, %s)",
+            (data.id_campaign, data.id_channel, data.destination)
         )
     except pymysql.err.IntegrityError as e:
-        raise HTTPException(status_code=400, detail=f"Error al insertar clic: {e}")
+        raise HTTPException(status_code=400, detail=f"Error al insertar tracking link: {e}")
 
-def update_clic_service(id_clics: int, data: Clic):
+def update_tracking_link_service(id_link: int, data: TrackingLink):
     try:
         run_query(
-            "UPDATE clics SET campana_id=%s, fecha_hora=%s, dispositivo=%s, canal_id=%s WHERE id_clics=%s",
-            (data.campana_id, data.fecha_hora, data.dispositivo, data.canal_id, id_clics)
+            "UPDATE tracking_links SET id_campaign=%s, id_channel=%s, destination=%s WHERE id_link=%s",
+            (data.id_campaign, data.id_channel, data.destination, id_link)
         )
     except pymysql.err.IntegrityError as e:
-        raise HTTPException(status_code=400, detail=f"Error al actualizar clic: {e}")
+        raise HTTPException(status_code=400, detail=f"Error al actualizar tracking link: {e}")
 
-def delete_clic_service(id_clics: int):
+def delete_tracking_link_service(id_link: int):
+    result = run_query(
+        "SELECT COUNT(*) AS total FROM clicks WHERE id_link=%s",
+        (id_link,), fetch=True
+    )
+    if result[0]['total'] > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede eliminar el tracking link: tiene clicks asociados."
+        )
+    run_query("DELETE FROM tracking_links WHERE id_link=%s", (id_link,))
+
+
+# ---------------------------------------------------------------
+# CLICKS
+# ---------------------------------------------------------------
+def insert_click(data: Click):
     try:
-        run_query("DELETE FROM clics WHERE id_clics=%s", (id_clics,))
+        run_query(
+            "INSERT INTO clicks (id_link, ip_address, user_agent, referrer, country, clicked_at) VALUES (%s, %s, %s, %s, %s, %s)",
+            (data.id_link, data.ip_address, data.user_agent, data.referrer, data.country, data.clicked_at)
+        )
     except pymysql.err.IntegrityError as e:
-        raise HTTPException(status_code=400, detail=f"No se puede eliminar clic: {e}")
+        raise HTTPException(status_code=400, detail=f"Error al insertar click: {e}")
+
+def update_click_service(id_click: int, data: Click):
+    try:
+        run_query(
+            "UPDATE clicks SET id_link=%s, ip_address=%s, user_agent=%s, referrer=%s, country=%s, clicked_at=%s WHERE id_click=%s",
+            (data.id_link, data.ip_address, data.user_agent, data.referrer, data.country, data.clicked_at, id_click)
+        )
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"Error al actualizar click: {e}")
+
+def delete_click_service(id_click: int):
+    result = run_query(
+        "SELECT COUNT(*) AS total FROM conversions WHERE id_click=%s",
+        (id_click,), fetch=True
+    )
+    if result[0]['total'] > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede eliminar el click: tiene conversiones asociadas."
+        )
+    run_query("DELETE FROM clicks WHERE id_click=%s", (id_click,))
 
 
-# --------------------
-
+# ---------------------------------------------------------------
+# CONVERSIONS
+# ---------------------------------------------------------------
 def insert_conversion(data: Conversion):
     try:
         run_query(
-            "INSERT INTO conversiones (campana_id, ingreso, fecha_hora, canal_id, origen) VALUES (%s, %s, %s, %s, %s)",
-            (data.campana_id, float(data.ingreso), data.fecha_hora, data.canal_id, data.origen)
+            "INSERT INTO conversions (id_campaign, id_click, revenue, type, source, notes) VALUES (%s, %s, %s, %s, %s, %s)",
+            (data.id_campaign, data.id_click, float(data.revenue), data.type, data.source, data.notes)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al insertar conversión: {e}")
@@ -146,35 +377,44 @@ def insert_conversion(data: Conversion):
 def update_conversion_service(id_conversion: int, data: Conversion):
     try:
         run_query(
-            "UPDATE conversiones SET campana_id=%s, ingreso=%s, fecha_hora=%s, canal_id=%s, origen=%s WHERE id_conversion=%s",
-            (data.campana_id, float(data.ingreso), data.fecha_hora, data.canal_id, data.origen, id_conversion)
+            "UPDATE conversions SET id_campaign=%s, id_click=%s, revenue=%s, type=%s, source=%s, notes=%s WHERE id_conversion=%s",
+            (data.id_campaign, data.id_click, float(data.revenue), data.type, data.source, data.notes, id_conversion)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al actualizar conversión: {e}")
 
 def delete_conversion_service(id_conversion: int):
     try:
-        run_query("DELETE FROM conversiones WHERE id_conversion=%s", (id_conversion,))
+        run_query("DELETE FROM conversions WHERE id_conversion=%s", (id_conversion,))
     except pymysql.err.IntegrityError as e:
-        raise HTTPException(status_code=400, detail=f"No se puede eliminar conversión: {e}")
+        raise HTTPException(status_code=400, detail=f"No se puede eliminar la conversión: {e}")
 
 
-# --------------------
-
+# ---------------------------------------------------------------
+# READ TABLE
+# ---------------------------------------------------------------
 def read_table(table: str):
     allowed_tables = {
-        "usuarios", "campanas", "canales", "campanas_canales", "clics", "conversiones"
+        "persons", "role", "permissions", "role_has_permissions",
+        "companies", "users", "user_company",
+        "campaigns", "channels", "tracking_links", "clicks", "conversions"
     }
     if table not in allowed_tables:
         raise HTTPException(status_code=400, detail=f"Tabla '{table}' no permitida")
 
     id_column_map = {
-        "usuarios": "id_usuario",
-        "campanas": "id_campana",
-        "canales": "id_canal",
-        "campanas_canales": "campana_id",
-        "clics": "id_clics",
-        "conversiones": "id_conversion"
+        "persons":               "id_person",
+        "role":                  "id_role",
+        "permissions":           "id_permissions",
+        "role_has_permissions":  "id_role_permission",
+        "companies":             "id_company",
+        "users":                 "id_user",
+        "user_company":          "id_user_company",
+        "campaigns":             "id_campaign",
+        "channels":              "id_channel",
+        "tracking_links":        "id_link",
+        "clicks":                "id_click",
+        "conversions":           "id_conversion",
     }
     id_col = id_column_map[table]
 
