@@ -228,8 +228,8 @@ def delete_user_company_service(id_user_company: int):
 def insert_campaign(data: Campaign):
     try:
         run_query(
-            "INSERT INTO campaigns (id_company, name, description, status, start_date, end_date) VALUES (%s, %s, %s, %s, %s, %s)",
-            (data.id_company, data.name, data.description, data.status, data.start_date, data.end_date)
+            "INSERT INTO campaigns (id_company, name, description, status, start_date, end_date, spent) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (data.id_company, data.name, data.description, data.status, data.start_date, data.end_date, data.spent)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al insertar campaña: {e}")
@@ -237,8 +237,8 @@ def insert_campaign(data: Campaign):
 def update_campaign_service(id_campaign: int, data: Campaign):
     try:
         run_query(
-            "UPDATE campaigns SET id_company=%s, name=%s, description=%s, status=%s, start_date=%s, end_date=%s WHERE id_campaign=%s",
-            (data.id_company, data.name, data.description, data.status, data.start_date, data.end_date, id_campaign)
+            "UPDATE campaigns SET id_company=%s, name=%s, description=%s, status=%s, start_date=%s, end_date=%s, spent=%s WHERE id_campaign=%s",
+            (data.id_company, data.name, data.description, data.status, data.start_date, data.end_date, data.spent, id_campaign)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al actualizar campaña: {e}")

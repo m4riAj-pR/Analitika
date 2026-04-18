@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from datetime import date
 from typing import Optional
 from enum import Enum
-
+from decimal import Decimal
 
 class CampaignStatus(str, Enum):
     draft = "draft"
@@ -19,3 +19,4 @@ class Campaign(BaseModel):
     status: CampaignStatus = CampaignStatus.draft
     start_date: Optional[date] = None
     end_date: Optional[date] = None
+    spent: Optional[Decimal] = Decimal("0.00")
