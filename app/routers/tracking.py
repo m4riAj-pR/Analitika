@@ -65,7 +65,11 @@ def get_metricas(id_campaign: int):
 
     cpc = round(spent / total_clics, 2) if total_clics > 0 else 0
     cpa = round(spent / total_conversiones, 2) if total_conversiones > 0 else 0
-    roi = round((ingresos - spent) / spent * 100, 2) if spent > 0 else 0
+    roi = round(((ingresos - spent) / spent) * 100, 2) if spent > 0 else 0
+
+    roas = round(ingresos / spent, 2) if spent > 0 else 0
+    conversion_rate = round((total_conversiones / total_clics) * 100, 2) if total_clics > 0 else 0
+    aov = round(ingresos / total_conversiones, 2) if total_conversiones > 0 else 0
 
     return {
         "clics": total_clics,
@@ -74,7 +78,10 @@ def get_metricas(id_campaign: int):
         "spent": spent,
         "cpc": cpc,
         "cpa": cpa,
-        "roi": roi
+        "roi": roi,
+        "roas": roas,
+        "conversion_rate": conversion_rate,
+        "aov": aov
     }
 @router.get("/stats/{id_campaign}/clics-por-dia")
 def get_clics_por_dia(id_campaign: int):

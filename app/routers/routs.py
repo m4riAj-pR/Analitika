@@ -280,3 +280,19 @@ def update_conversion(id: int, data: Conversion):
 def delete_conversion(id: int):
     delete_conversion_service(id)
     return {"ok": True}
+
+@router.get("/campaigns/top")
+def get_top_campaigns(limit: int = 5):
+    from app.db.database import run_query
+    resultado = run_query("""
+        SELECT c.id_campaign, c.name, 
+               COALESCE(SUM(cv.revenue), 0) as ingresos,
+               c.spent,
+               COALESCE(SUM(cv.revenue), 0) - c.spent as beneficio
+        FROM campaigns c
+        LEFT JOIN conversions cv ON c.id_campaign = cv.id_campaign
+        GROUP BY c.id_campaign
+        ORDER BY beneficio DESC
+        LIMIT %s
+    """, (limit,), fetch=True)
+    return resultado
