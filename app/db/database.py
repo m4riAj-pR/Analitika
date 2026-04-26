@@ -2,14 +2,20 @@
 import os
 import pymysql
 from pymysql.cursors import DictCursor
+from urllib.parse import urlparse
 
 def get_connection():
+    database_url = os.getenv("DATABASE_URL")
+
+    # Parsear la URL de Railway
+    url = urlparse(database_url)
+
     return pymysql.connect(
-        host=os.getenv("DB_HOST", "localhost"),
-        user=os.getenv("DB_USER", "root"),
-        password=os.getenv("DB_PASSWORD", ""),
-        database=os.getenv("DB_NAME", "analitika_db"),
-        port=int(os.getenv("DB_PORT", 3306)),
+        host=url.hostname,
+        port=url.port,
+        user=url.username,
+        password=url.password,
+        database=url.path[1:],  # quita el "/"
         cursorclass=DictCursor
     )
 
