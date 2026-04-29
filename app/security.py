@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
+import logging
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -7,6 +8,8 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from app.db.database import run_query
+
+logger = logging.getLogger(__name__)
 
 SECRET_KEY = os.getenv("JWT_SECRET")
 ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
@@ -18,20 +21,38 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verifica la contraseña contra el hash almacenado.
+    
+    Lanza excepciones si el hash tiene un formato inválido.
+    Estas excepciones deben ser capturadas por el caller.
+    """
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        logger.error(f"Error en verify_password - posible hash mal formateado: {str(e)}")
+        raise  # Re-lanza la excepción para que el caller la maneje
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
-    if not SECRET_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="JWT_SECRET no configurado"
-        )
+    """Crea un token JWT.
 
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    Lanza ValueError si JWT_SECRET no esta configurado.
+    El caller debe manejar esta excepcion.
+    """
+    if not SECRET_KEY:
+        logger.error("JWT_SECRET no esta configurado en variables de entorno")
+        raise ValueError("JWT_SECRET no configurado en el servidor")
+
+    try:
+        to_encode = data.copy()
+        expire = datetime.now(timezone.utc) + (
+            expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        )
+        to_encode.update({"exp": expire})
+        return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    except Exception as e:
+        logger.error(f"Error al crear token JWT: {str(e)}")
+        raise
 
 
 def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:

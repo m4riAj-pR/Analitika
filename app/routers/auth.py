@@ -1,9 +1,11 @@
 from fastapi import APIRouter, HTTPException, status
+import logging
 
 from app.db.database import run_query
 from app.schemas.auth import LoginRequest, TokenResponse
 from app.security import create_access_token, verify_password
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Auth"])
 
 
@@ -28,10 +30,29 @@ def login_for_access_token(data: LoginRequest):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales inválidas")
 
     user = result[0]
-    if not verify_password(data.password, user["password_hash"]):
+    
+    # Verifica contraseña con manejo de errores
+    try:
+        is_valid_password = verify_password(data.password, user["password_hash"])
+        if not is_valid_password:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales inválidas")
+    except HTTPException:
+        # Re-raise HTTPException (credenciales inválidas)
+        raise
+    except Exception as e:
+        # Captura cualquier otro error (hash mal formateado, etc.)
+        logger.error(f"Error al verificar contraseña para {data.email}: {str(e)}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales inválidas")
-
-    token = create_access_token({"sub": user["email"], "id_user": user["id_user"]})
+    
+    # Crea token con manejo de errores
+    try:
+        token = create_access_token({"sub": user["email"], "id_user": user["id_user"]})
+    except Exception as e:
+        logger.error(f"Error al crear token JWT para {data.email}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al generar token de autenticación"
+        )
 
     return {
         "access_token": token,
