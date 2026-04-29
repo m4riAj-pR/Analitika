@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader
 from datetime import datetime
 from app.db.database import run_query
+from app.security import get_current_user
+from app.services.a_service import ensure_campaign_access
 
 router = APIRouter()
 env = Environment(loader=FileSystemLoader("app/templates"))
@@ -36,7 +38,8 @@ def landing_campana(id_link: int, request: Request):
     html = template.render(nombre=campana["name"], descripcion=campana["description"])
     return HTMLResponse(content=html)
 @router.get("/stats/{id_campaign}")
-def get_metricas(id_campaign: int):
+def get_metricas(id_campaign: int, current_user: dict = Depends(get_current_user)):
+    ensure_campaign_access(current_user["id_user"], id_campaign)
     # Clics totales
     clics = run_query("""
         SELECT COUNT(c.id_click) as total
@@ -84,7 +87,8 @@ def get_metricas(id_campaign: int):
         "aov": aov
     }
 @router.get("/stats/{id_campaign}/clics-por-dia")
-def get_clics_por_dia(id_campaign: int):
+def get_clics_por_dia(id_campaign: int, current_user: dict = Depends(get_current_user)):
+    ensure_campaign_access(current_user["id_user"], id_campaign)
     resultado = run_query("""
         SELECT DATE(c.clicked_at) as fecha, COUNT(c.id_click) as clics
         FROM clicks c
@@ -99,7 +103,8 @@ def get_clics_por_dia(id_campaign: int):
         for r in resultado
     ]}
 @router.get("/stats/{id_campaign}/tabla-clics")
-def get_tabla_clics(id_campaign: int):
+def get_tabla_clics(id_campaign: int, current_user: dict = Depends(get_current_user)):
+    ensure_campaign_access(current_user["id_user"], id_campaign)
     resultado = run_query("""
         SELECT 
             DATE(c.clicked_at) as fecha,

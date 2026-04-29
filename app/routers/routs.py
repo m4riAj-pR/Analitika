@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.schemas.persons import Person
 from app.schemas.role import Role
@@ -14,6 +14,7 @@ from app.schemas.clicks import Click
 from app.schemas.conversions import Conversion
 
 from app.services.a_service import *
+from app.security import get_current_user
 
 router = APIRouter(prefix="/analitika", tags=["Analitika"])
 
@@ -24,28 +25,28 @@ VALID_TABLES = {
 }
 
 @router.get("/")
-def root():
+def root(current_user: dict = Depends(get_current_user)):
     return {"message": "API conectada a analitika_db"}
 
 
 # PERSONS ----------------
 
 @router.post("/persons")
-def create_person(data: Person):
+def create_person(data: Person, current_user: dict = Depends(get_current_user)):
     insert_person(data)
     return {"ok": True}
 
 @router.get("/persons")
-def get_persons():
-    return read_table("persons")
+def get_persons(current_user: dict = Depends(get_current_user)):
+    return read_table_for_user("persons", current_user["id_user"])
 
 @router.put("/persons/{id}")
-def update_person(id: int, data: Person):
+def update_person(id: int, data: Person, current_user: dict = Depends(get_current_user)):
     update_person_service(id, data)
     return {"ok": True}
 
 @router.delete("/persons/{id}")
-def delete_person(id: int):
+def delete_person(id: int, current_user: dict = Depends(get_current_user)):
     delete_person_service(id)
     return {"ok": True}
 
@@ -53,21 +54,21 @@ def delete_person(id: int):
 # ROLE ----------------
 
 @router.post("/roles")
-def create_role(data: Role):
+def create_role(data: Role, current_user: dict = Depends(get_current_user)):
     insert_role(data)
     return {"ok": True}
 
 @router.get("/roles")
-def get_roles():
+def get_roles(current_user: dict = Depends(get_current_user)):
     return read_table("role")
 
 @router.put("/roles/{id}")
-def update_role(id: int, data: Role):
+def update_role(id: int, data: Role, current_user: dict = Depends(get_current_user)):
     update_role_service(id, data)
     return {"ok": True}
 
 @router.delete("/roles/{id}")
-def delete_role(id: int):
+def delete_role(id: int, current_user: dict = Depends(get_current_user)):
     delete_role_service(id)
     return {"ok": True}
 
@@ -75,21 +76,21 @@ def delete_role(id: int):
 # PERMISSIONS ----------------
 
 @router.post("/permissions")
-def create_permission(data: Permission):
+def create_permission(data: Permission, current_user: dict = Depends(get_current_user)):
     insert_permission(data)
     return {"ok": True}
 
 @router.get("/permissions")
-def get_permissions():
+def get_permissions(current_user: dict = Depends(get_current_user)):
     return read_table("permissions")
 
 @router.put("/permissions/{id}")
-def update_permission(id: int, data: Permission):
+def update_permission(id: int, data: Permission, current_user: dict = Depends(get_current_user)):
     update_permission_service(id, data)
     return {"ok": True}
 
 @router.delete("/permissions/{id}")
-def delete_permission(id: int):
+def delete_permission(id: int, current_user: dict = Depends(get_current_user)):
     delete_permission_service(id)
     return {"ok": True}
 
@@ -97,16 +98,16 @@ def delete_permission(id: int):
 # ROLE_HAS_PERMISSIONS ----------------
 
 @router.post("/role-permissions")
-def create_role_permission(data: RoleHasPermission):
+def create_role_permission(data: RoleHasPermission, current_user: dict = Depends(get_current_user)):
     insert_role_permission(data)
     return {"ok": True}
 
 @router.get("/role-permissions")
-def get_role_permissions():
+def get_role_permissions(current_user: dict = Depends(get_current_user)):
     return read_table("role_has_permissions")
 
 @router.delete("/role-permissions/{id}")
-def delete_role_permission(id: int):
+def delete_role_permission(id: int, current_user: dict = Depends(get_current_user)):
     delete_role_permission_service(id)
     return {"ok": True}
 
@@ -114,21 +115,25 @@ def delete_role_permission(id: int):
 # COMPANIES ----------------
 
 @router.post("/companies")
-def create_company(data: Company):
+def create_company(data: Company, current_user: dict = Depends(get_current_user)):
+    if data.id_user is not None and data.id_user != current_user["id_user"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
     insert_company(data)
     return {"ok": True}
 
 @router.get("/companies")
-def get_companies():
-    return read_table("companies")
+def get_companies(current_user: dict = Depends(get_current_user)):
+    return read_table_for_user("companies", current_user["id_user"])
 
 @router.put("/companies/{id}")
-def update_company(id: int, data: Company):
+def update_company(id: int, data: Company, current_user: dict = Depends(get_current_user)):
+    ensure_company_access(current_user["id_user"], id)
     update_company_service(id, data)
     return {"ok": True}
 
 @router.delete("/companies/{id}")
-def delete_company(id: int):
+def delete_company(id: int, current_user: dict = Depends(get_current_user)):
+    ensure_company_access(current_user["id_user"], id)
     delete_company_service(id)
     return {"ok": True}
 
@@ -136,21 +141,26 @@ def delete_company(id: int):
 # USERS ----------------
 
 @router.post("/users")
-def create_user(data: User):
+def create_user(data: User, current_user: dict = Depends(get_current_user)):
+    if data.id_company is not None:
+        ensure_company_access(current_user["id_user"], data.id_company)
     insert_user(data)
     return {"ok": True}
 
 @router.get("/users")
-def get_users():
-    return read_table("users")
+def get_users(current_user: dict = Depends(get_current_user)):
+    return read_table_for_user("users", current_user["id_user"])
 
 @router.put("/users/{id}")
-def update_user(id: int, data: User):
+def update_user(id: int, data: User, current_user: dict = Depends(get_current_user)):
+    if data.id_company is not None:
+        ensure_company_access(current_user["id_user"], data.id_company)
     update_user_service(id, data)
     return {"ok": True}
 
 @router.delete("/users/{id}")
-def delete_user(id: int):
+def delete_user(id: int, current_user: dict = Depends(get_current_user)):
+    ensure_user_access(current_user["id_user"], id)
     delete_user_service(id)
     return {"ok": True}
 
@@ -158,16 +168,18 @@ def delete_user(id: int):
 # USER_COMPANY ----------------
 
 @router.post("/user-company")
-def create_user_company(data: UserCompany):
+def create_user_company(data: UserCompany, current_user: dict = Depends(get_current_user)):
+    ensure_company_access(current_user["id_user"], data.id_company)
     insert_user_company(data)
     return {"ok": True}
 
 @router.get("/user-company")
-def get_user_company():
-    return read_table("user_company")
+def get_user_company(current_user: dict = Depends(get_current_user)):
+    return read_table_for_user("user_company", current_user["id_user"])
 
 @router.delete("/user-company/{id}")
-def delete_user_company(id: int):
+def delete_user_company(id: int, current_user: dict = Depends(get_current_user)):
+    ensure_user_company_access(current_user["id_user"], id)
     delete_user_company_service(id)
     return {"ok": True}
 
@@ -175,21 +187,24 @@ def delete_user_company(id: int):
 # CAMPAIGNS ----------------
 
 @router.post("/campaigns")
-def create_campaign(data: Campaign):
+def create_campaign(data: Campaign, current_user: dict = Depends(get_current_user)):
+    ensure_company_access(current_user["id_user"], data.id_company)
     insert_campaign(data)
     return {"ok": True}
 
 @router.get("/campaigns")
-def get_campaigns():
-    return read_table("campaigns")
+def get_campaigns(current_user: dict = Depends(get_current_user)):
+    return read_table_for_user("campaigns", current_user["id_user"])
 
 @router.put("/campaigns/{id}")
-def update_campaign(id: int, data: Campaign):
+def update_campaign(id: int, data: Campaign, current_user: dict = Depends(get_current_user)):
+    ensure_campaign_access(current_user["id_user"], id)
     update_campaign_service(id, data)
     return {"ok": True}
 
 @router.delete("/campaigns/{id}")
-def delete_campaign(id: int):
+def delete_campaign(id: int, current_user: dict = Depends(get_current_user)):
+    ensure_campaign_access(current_user["id_user"], id)
     delete_campaign_service(id)
     return {"ok": True}
 
@@ -197,21 +212,21 @@ def delete_campaign(id: int):
 # CHANNELS ----------------
 
 @router.post("/channels")
-def create_channel(data: Channel):
+def create_channel(data: Channel, current_user: dict = Depends(get_current_user)):
     insert_channel(data)
     return {"ok": True}
 
 @router.get("/channels")
-def get_channels():
+def get_channels(current_user: dict = Depends(get_current_user)):
     return read_table("channels")
 
 @router.put("/channels/{id}")
-def update_channel(id: int, data: Channel):
+def update_channel(id: int, data: Channel, current_user: dict = Depends(get_current_user)):
     update_channel_service(id, data)
     return {"ok": True}
 
 @router.delete("/channels/{id}")
-def delete_channel(id: int):
+def delete_channel(id: int, current_user: dict = Depends(get_current_user)):
     delete_channel_service(id)
     return {"ok": True}
 
@@ -219,21 +234,24 @@ def delete_channel(id: int):
 # TRACKING LINKS ----------------
 
 @router.post("/tracking-links")
-def create_tracking_link(data: TrackingLink):
+def create_tracking_link(data: TrackingLink, current_user: dict = Depends(get_current_user)):
+    ensure_campaign_access(current_user["id_user"], data.id_campaign)
     insert_tracking_link(data)
     return {"ok": True}
 
 @router.get("/tracking-links")
-def get_tracking_links():
-    return read_table("tracking_links")
+def get_tracking_links(current_user: dict = Depends(get_current_user)):
+    return read_table_for_user("tracking_links", current_user["id_user"])
 
 @router.put("/tracking-links/{id}")
-def update_tracking_link(id: int, data: TrackingLink):
+def update_tracking_link(id: int, data: TrackingLink, current_user: dict = Depends(get_current_user)):
+    ensure_tracking_link_access(current_user["id_user"], id)
     update_tracking_link_service(id, data)
     return {"ok": True}
 
 @router.delete("/tracking-links/{id}")
-def delete_tracking_link(id: int):
+def delete_tracking_link(id: int, current_user: dict = Depends(get_current_user)):
+    ensure_tracking_link_access(current_user["id_user"], id)
     delete_tracking_link_service(id)
     return {"ok": True}
 
@@ -241,21 +259,24 @@ def delete_tracking_link(id: int):
 # CLICKS ----------------
 
 @router.post("/clicks")
-def create_click(data: Click):
+def create_click(data: Click, current_user: dict = Depends(get_current_user)):
+    ensure_tracking_link_access(current_user["id_user"], data.id_link)
     insert_click(data)
     return {"ok": True}
 
 @router.get("/clicks")
-def get_clicks():
-    return read_table("clicks")
+def get_clicks(current_user: dict = Depends(get_current_user)):
+    return read_table_for_user("clicks", current_user["id_user"])
 
 @router.put("/clicks/{id}")
-def update_click(id: int, data: Click):
+def update_click(id: int, data: Click, current_user: dict = Depends(get_current_user)):
+    ensure_click_access(current_user["id_user"], id)
     update_click_service(id, data)
     return {"ok": True}
 
 @router.delete("/clicks/{id}")
-def delete_click(id: int):
+def delete_click(id: int, current_user: dict = Depends(get_current_user)):
+    ensure_click_access(current_user["id_user"], id)
     delete_click_service(id)
     return {"ok": True}
 
@@ -263,27 +284,34 @@ def delete_click(id: int):
 # CONVERSIONS ----------------
 
 @router.post("/conversions")
-def create_conversion(data: Conversion):
+def create_conversion(data: Conversion, current_user: dict = Depends(get_current_user)):
+    ensure_campaign_access(current_user["id_user"], data.id_campaign)
     insert_conversion(data)
     return {"ok": True}
 
 @router.get("/conversions")
-def get_conversions():
-    return read_table("conversions")
+def get_conversions(current_user: dict = Depends(get_current_user)):
+    return read_table_for_user("conversions", current_user["id_user"])
 
 @router.put("/conversions/{id}")
-def update_conversion(id: int, data: Conversion):
+def update_conversion(id: int, data: Conversion, current_user: dict = Depends(get_current_user)):
+    ensure_conversion_access(current_user["id_user"], id)
     update_conversion_service(id, data)
     return {"ok": True}
 
 @router.delete("/conversions/{id}")
-def delete_conversion(id: int):
+def delete_conversion(id: int, current_user: dict = Depends(get_current_user)):
+    ensure_conversion_access(current_user["id_user"], id)
     delete_conversion_service(id)
     return {"ok": True}
 
 @router.get("/campaigns/top")
-def get_top_campaigns(limit: int = 5):
+def get_top_campaigns(limit: int = 5, current_user: dict = Depends(get_current_user)):
     from app.db.database import run_query
+    company_ids = get_user_company_ids(current_user["id_user"])
+    if not company_ids:
+        return []
+    placeholders = ", ".join(["%s"] * len(company_ids))
     resultado = run_query("""
         SELECT c.id_campaign, c.name, 
                COALESCE(SUM(cv.revenue), 0) as ingresos,
@@ -291,8 +319,9 @@ def get_top_campaigns(limit: int = 5):
                COALESCE(SUM(cv.revenue), 0) - c.spent as beneficio
         FROM campaigns c
         LEFT JOIN conversions cv ON c.id_campaign = cv.id_campaign
+        WHERE c.id_company IN (""" + placeholders + ")
         GROUP BY c.id_campaign
         ORDER BY beneficio DESC
         LIMIT %s
-    """, (limit,), fetch=True)
+    """, (*company_ids, limit), fetch=True)
     return resultado

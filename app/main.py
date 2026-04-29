@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from app.routers import routs, tracking
+from app.routers import routs, tracking, auth
 
 app = FastAPI(
     title="Analitika API",
@@ -12,6 +12,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 app.include_router(routs.router)
 app.include_router(tracking.router)
+app.include_router(auth.router)
 
 @app.get("/")
 def read_root():

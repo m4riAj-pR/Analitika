@@ -391,8 +391,254 @@ def delete_conversion_service(id_conversion: int):
 
 
 # ---------------------------------------------------------------
+# AUTHORIZATION HELPERS
+# ---------------------------------------------------------------
+def _build_in_clause(values: list[int]) -> tuple[str, tuple]:
+    placeholders = ", ".join(["%s"] * len(values))
+    return f"({placeholders})", tuple(values)
+
+
+def get_user_company_ids(id_user: int) -> list[int]:
+    rows = run_query(
+        "SELECT id_company FROM user_company WHERE id_user=%s",
+        (id_user,),
+        fetch=True
+    )
+    company_ids = [row["id_company"] for row in rows]
+    if company_ids:
+        return company_ids
+
+    legacy = run_query(
+        "SELECT id_company FROM users WHERE id_user=%s AND id_company IS NOT NULL",
+        (id_user,),
+        fetch=True
+    )
+    return [row["id_company"] for row in legacy]
+
+
+def ensure_company_access(id_user: int, id_company: int) -> None:
+    company_ids = get_user_company_ids(id_user)
+    if id_company not in company_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
+
+
+def ensure_campaign_access(id_user: int, id_campaign: int) -> None:
+    result = run_query(
+        "SELECT id_company FROM campaigns WHERE id_campaign=%s",
+        (id_campaign,),
+        fetch=True
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaña no encontrada")
+    ensure_company_access(id_user, result[0]["id_company"])
+
+
+def ensure_tracking_link_access(id_user: int, id_link: int) -> None:
+    result = run_query(
+        """
+        SELECT c.id_company
+        FROM tracking_links tl
+        JOIN campaigns c ON tl.id_campaign = c.id_campaign
+        WHERE tl.id_link=%s
+        """,
+        (id_link,),
+        fetch=True
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tracking link no encontrado")
+    ensure_company_access(id_user, result[0]["id_company"])
+
+
+def ensure_click_access(id_user: int, id_click: int) -> None:
+    result = run_query(
+        """
+        SELECT c.id_company
+        FROM clicks ck
+        JOIN tracking_links tl ON ck.id_link = tl.id_link
+        JOIN campaigns c ON tl.id_campaign = c.id_campaign
+        WHERE ck.id_click=%s
+        """,
+        (id_click,),
+        fetch=True
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Click no encontrado")
+    ensure_company_access(id_user, result[0]["id_company"])
+
+
+def ensure_conversion_access(id_user: int, id_conversion: int) -> None:
+    result = run_query(
+        """
+        SELECT COALESCE(c1.id_company, c2.id_company) AS id_company
+        FROM conversions cv
+        LEFT JOIN campaigns c1 ON cv.id_campaign = c1.id_campaign
+        LEFT JOIN clicks ck ON cv.id_click = ck.id_click
+        LEFT JOIN tracking_links tl ON ck.id_link = tl.id_link
+        LEFT JOIN campaigns c2 ON tl.id_campaign = c2.id_campaign
+        WHERE cv.id_conversion=%s
+        """,
+        (id_conversion,),
+        fetch=True
+    )
+    if not result or result[0]["id_company"] is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversión no encontrada")
+    ensure_company_access(id_user, result[0]["id_company"])
+
+
+def ensure_user_access(id_user: int, target_user_id: int) -> None:
+    if id_user == target_user_id:
+        return
+    company_ids = get_user_company_ids(id_user)
+    if not company_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
+    in_clause, params = _build_in_clause(company_ids)
+    result = run_query(
+        f"""
+        SELECT u.id_user
+        FROM users u
+        JOIN user_company uc ON u.id_user = uc.id_user
+        WHERE u.id_user=%s AND uc.id_company IN {in_clause}
+        """,
+        (target_user_id, *params),
+        fetch=True
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
+
+
+def ensure_user_company_access(id_user: int, id_user_company: int) -> None:
+    company_ids = get_user_company_ids(id_user)
+    if not company_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
+    in_clause, params = _build_in_clause(company_ids)
+    result = run_query(
+        f"""
+        SELECT id_user_company
+        FROM user_company
+        WHERE id_user_company=%s AND id_company IN {in_clause}
+        """,
+        (id_user_company, *params),
+        fetch=True
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
+
+
+# ---------------------------------------------------------------
 # READ TABLE
 # ---------------------------------------------------------------
+def read_table_for_user(table: str, id_user: int):
+    allowed_tables = {
+        "persons", "role", "permissions", "role_has_permissions",
+        "companies", "users", "user_company",
+        "campaigns", "channels", "tracking_links", "clicks", "conversions"
+    }
+    if table not in allowed_tables:
+        raise HTTPException(status_code=400, detail=f"Tabla '{table}' no permitida")
+
+    company_ids = get_user_company_ids(id_user)
+    if not company_ids and table in {
+        "persons", "companies", "users", "user_company",
+        "campaigns", "tracking_links", "clicks", "conversions"
+    }:
+        return []
+
+    if table in {"role", "permissions", "role_has_permissions", "channels"}:
+        return read_table(table)
+
+    in_clause, params = _build_in_clause(company_ids) if company_ids else ("(%s)", tuple())
+
+    if table == "companies":
+        return run_query(
+            f"SELECT * FROM companies WHERE id_company IN {in_clause} ORDER BY id_company",
+            params,
+            fetch=True
+        )
+
+    if table == "users":
+        return run_query(
+            f"""
+            SELECT DISTINCT u.*
+            FROM users u
+            JOIN user_company uc ON u.id_user = uc.id_user
+            WHERE uc.id_company IN {in_clause}
+            ORDER BY u.id_user
+            """,
+            params,
+            fetch=True
+        )
+
+    if table == "user_company":
+        return run_query(
+            f"SELECT * FROM user_company WHERE id_company IN {in_clause} ORDER BY id_user_company",
+            params,
+            fetch=True
+        )
+
+    if table == "persons":
+        return run_query(
+            f"""
+            SELECT DISTINCT p.*
+            FROM persons p
+            JOIN users u ON p.id_person = u.id_person
+            JOIN user_company uc ON u.id_user = uc.id_user
+            WHERE uc.id_company IN {in_clause}
+            ORDER BY p.id_person
+            """,
+            params,
+            fetch=True
+        )
+
+    if table == "campaigns":
+        return run_query(
+            f"SELECT * FROM campaigns WHERE id_company IN {in_clause} ORDER BY id_campaign",
+            params,
+            fetch=True
+        )
+
+    if table == "tracking_links":
+        return run_query(
+            f"""
+            SELECT tl.*
+            FROM tracking_links tl
+            JOIN campaigns c ON tl.id_campaign = c.id_campaign
+            WHERE c.id_company IN {in_clause}
+            ORDER BY tl.id_link
+            """,
+            params,
+            fetch=True
+        )
+
+    if table == "clicks":
+        return run_query(
+            f"""
+            SELECT ck.*
+            FROM clicks ck
+            JOIN tracking_links tl ON ck.id_link = tl.id_link
+            JOIN campaigns c ON tl.id_campaign = c.id_campaign
+            WHERE c.id_company IN {in_clause}
+            ORDER BY ck.id_click
+            """,
+            params,
+            fetch=True
+        )
+
+    if table == "conversions":
+        return run_query(
+            f"""
+            SELECT cv.*
+            FROM conversions cv
+            JOIN campaigns c ON cv.id_campaign = c.id_campaign
+            WHERE c.id_company IN {in_clause}
+            ORDER BY cv.id_conversion
+            """,
+            params,
+            fetch=True
+        )
+
+    return read_table(table)
+
+
 def read_table(table: str):
     allowed_tables = {
         "persons", "role", "permissions", "role_has_permissions",
