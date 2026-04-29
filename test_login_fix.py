@@ -150,7 +150,7 @@ def validate_endpoint_structure():
         else:
             print_warning("Endpoint no tiene logging")
 
-        if "verify_password" in source:
+        if "verify_password" in source or "verify_and_upgrade_password" in source:
             print_success("Endpoint verifica el password")
         else:
             print_error("Endpoint no verifica el password")

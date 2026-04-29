@@ -14,6 +14,7 @@ from app.schemas.channels import Channel
 from app.schemas.tracking_links import TrackingLink
 from app.schemas.clicks import Click
 from app.schemas.conversions import Conversion
+from app.security import hash_password
 
 
 # ---------------------------------------------------------------
@@ -174,9 +175,10 @@ def delete_company_service(id_company: int):
 # ---------------------------------------------------------------
 def insert_user(data: User):
     try:
+        password_hash = hash_password(data.password_hash)
         id_user = run_query(
             "INSERT INTO users (id_person, id_company, id_role, password_hash) VALUES (%s, %s, %s, %s)",
-            (data.id_person, data.id_company, data.id_role, data.password_hash),
+            (data.id_person, data.id_company, data.id_role, password_hash),
             return_lastrowid=True
         )
         if data.id_company is not None:
@@ -190,9 +192,10 @@ def insert_user(data: User):
 
 def update_user_service(id_user: int, data: User):
     try:
+        password_hash = hash_password(data.password_hash)
         run_query(
             "UPDATE users SET id_person=%s, id_company=%s, id_role=%s, password_hash=%s WHERE id_user=%s",
-            (data.id_person, data.id_company, data.id_role, data.password_hash, id_user)
+            (data.id_person, data.id_company, data.id_role, password_hash, id_user)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al actualizar usuario: {e}")

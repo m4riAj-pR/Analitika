@@ -142,10 +142,8 @@ def delete_company(id: int, current_user: dict = Depends(get_current_user)):
 
 @router.post("/users")
 def create_user(data: User, current_user: dict = Depends(get_current_user)):
-    from app.security import pwd_context
     if data.id_company is not None:
         ensure_company_access(current_user["id_user"], data.id_company)
-    data.password_hash = pwd_context.hash(data.password_hash)
     insert_user(data)
     return {"ok": True}
 

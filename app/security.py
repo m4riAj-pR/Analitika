@@ -1,6 +1,8 @@
-import os
-from datetime import datetime, timedelta, timezone
+import hashlib
 import logging
+import os
+import re
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -19,26 +21,64 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
+BCRYPT_PREFIXES = ("$2a$", "$2b$", "$2y$")
+MD5_RE = re.compile(r"^[a-fA-F0-9]{32}$")
+
+
+def is_bcrypt_hash(value: str | None) -> bool:
+    return isinstance(value, str) and value.startswith(BCRYPT_PREFIXES)
+
+
+def is_md5_hash(value: str | None) -> bool:
+    return isinstance(value, str) and bool(MD5_RE.fullmatch(value))
+
+
+def hash_password(password: str) -> str:
+    """Normaliza el password antes de guardarlo en BD."""
+    if password is None:
+        raise ValueError("Password no puede ser nulo")
+    if is_bcrypt_hash(password):
+        return password
+    return pwd_context.hash(password)
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verifica la contraseña contra el hash almacenado.
-    
-    Lanza excepciones si el hash tiene un formato inválido.
-    Estas excepciones deben ser capturadas por el caller.
-    """
+    """Verifica la contrasena contra el hash almacenado."""
     try:
         return pwd_context.verify(plain_password, hashed_password)
     except Exception as e:
         logger.error(f"Error en verify_password - posible hash mal formateado: {str(e)}")
-        raise  # Re-lanza la excepción para que el caller la maneje
+        raise
+
+
+def verify_and_upgrade_password(plain_password: str, stored_password: str | None) -> tuple[bool, str | None]:
+    """Verifica credenciales heredadas y devuelve un hash bcrypt nuevo si toca migrar."""
+    if stored_password is None:
+        return False, None
+
+    normalized_password = stored_password.strip()
+
+    if is_bcrypt_hash(normalized_password):
+        is_valid = verify_password(plain_password, normalized_password)
+        if is_valid and normalized_password != stored_password:
+            return True, pwd_context.hash(plain_password)
+        return is_valid, None
+
+    if plain_password == stored_password:
+        logger.warning("Se detecto una contrasena almacenada en texto plano; sera migrada a bcrypt.")
+        return True, pwd_context.hash(plain_password)
+
+    if is_md5_hash(normalized_password):
+        logger.warning("Se detecto una contrasena almacenada en MD5; sera migrada a bcrypt.")
+        candidate_hash = hashlib.md5(plain_password.encode("utf-8")).hexdigest()
+        if candidate_hash.lower() == normalized_password.lower():
+            return True, pwd_context.hash(plain_password)
+
+    return False, None
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
-    """Crea un token JWT.
-
-    Lanza ValueError si JWT_SECRET no esta configurado.
-    El caller debe manejar esta excepcion.
-    """
+    """Crea un token JWT."""
     if not SECRET_KEY:
         logger.error("JWT_SECRET no esta configurado en variables de entorno")
         raise ValueError("JWT_SECRET no configurado en el servidor")
