@@ -174,10 +174,17 @@ def delete_company_service(id_company: int):
 # ---------------------------------------------------------------
 def insert_user(data: User):
     try:
-        run_query(
+        id_user = run_query(
             "INSERT INTO users (id_person, id_company, id_role, password_hash) VALUES (%s, %s, %s, %s)",
-            (data.id_person, data.id_company, data.id_role, data.password_hash)
+            (data.id_person, data.id_company, data.id_role, data.password_hash),
+            return_lastrowid=True
         )
+        if data.id_company is not None:
+            run_query(
+                "INSERT INTO user_company (id_user, id_company) VALUES (%s, %s)",
+                (id_user, data.id_company)
+            )
+        return id_user
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al insertar usuario: {e}")
 

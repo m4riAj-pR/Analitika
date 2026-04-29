@@ -311,17 +311,17 @@ def get_top_campaigns(limit: int = 5, current_user: dict = Depends(get_current_u
     company_ids = get_user_company_ids(current_user["id_user"])
     if not company_ids:
         return []
-    placeholders = ", ".join(["%s"] * len(company_ids))
-    resultado = run_query("""
+    in_clause, params = _build_in_clause(company_ids)
+    resultado = run_query(f"""
         SELECT c.id_campaign, c.name, 
                COALESCE(SUM(cv.revenue), 0) as ingresos,
                c.spent,
                COALESCE(SUM(cv.revenue), 0) - c.spent as beneficio
         FROM campaigns c
         LEFT JOIN conversions cv ON c.id_campaign = cv.id_campaign
-        WHERE c.id_company IN (""" + placeholders + ")
+        WHERE c.id_company IN {in_clause}
         GROUP BY c.id_campaign
         ORDER BY beneficio DESC
         LIMIT %s
-    """, (*company_ids, limit), fetch=True)
+    """, (*params, limit), fetch=True)
     return resultado
