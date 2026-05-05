@@ -2,7 +2,7 @@ import json
 import logging
 from urllib.parse import parse_qs
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from app.db.database import run_query
 from app.schemas.auth import LoginRequest, TokenResponse
@@ -32,6 +32,7 @@ def parse_form_encoded_body(raw_body: bytes) -> dict[str, str]:
 
 
 async def parse_login_request(request: Request) -> LoginRequest:
+    print("BODY: ", request.body())
     raw_body = await request.body()
     if not raw_body:
         raise HTTPException(status_code=400, detail="Email y password son requeridos")
@@ -55,7 +56,7 @@ async def parse_login_request(request: Request) -> LoginRequest:
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login_for_access_token(request: Request):
+async def login_for_access_token(request: Request, response: Response):
     data = await parse_login_request(request)
     email = data.email.strip()
 
