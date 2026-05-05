@@ -5,7 +5,7 @@ from pymysql.cursors import DictCursor
 from urllib.parse import urlparse
 
 def get_connection():
-    db_url = os.getenv("DATABASE_URL")
+    db_url = "mysql+pymysql://root:KALtosOfuJlKoDdiUpveLhvfvjcOBPKd@metro.proxy.rlwy.net:10028/railway"
 
     if not db_url:
         raise RuntimeError("DATABASE_URL no está definida")

@@ -32,7 +32,6 @@ def parse_form_encoded_body(raw_body: bytes) -> dict[str, str]:
 
 
 async def parse_login_request(request: Request) -> LoginRequest:
-    print("BODY: ", request.body())
     raw_body = await request.body()
     if not raw_body:
         raise HTTPException(status_code=400, detail="Email y password son requeridos")
@@ -59,6 +58,8 @@ async def parse_login_request(request: Request) -> LoginRequest:
 async def login_for_access_token(request: Request, response: Response):
     data = await parse_login_request(request)
     email = data.email.strip()
+    print("EMAIL: ", email)
+    print("PASSWORD: ", data.password)
 
     if not email or not data.password:
         raise HTTPException(status_code=400, detail="Email y password son requeridos")
@@ -75,6 +76,7 @@ async def login_for_access_token(request: Request, response: Response):
             (email,),
             fetch=True
         )
+
     except Exception as e:
         print("LOGIN DB ERROR:", str(e))
         raise HTTPException(status_code=500, detail="Database connection failed")
