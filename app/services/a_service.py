@@ -14,7 +14,7 @@ from app.schemas.channels import Channel
 from app.schemas.tracking_links import TrackingLink
 from app.schemas.clicks import Click
 from app.schemas.conversions import Conversion
-from app.security import hash_password
+from app.security import hash_password, is_bcrypt_hash
 
 
 # ---------------------------------------------------------------
@@ -192,7 +192,15 @@ def insert_user(data: User):
 
 def update_user_service(id_user: int, data: User):
     try:
-        password_hash = hash_password(data.password_hash)
+        # Evitar doble hash: verificar si ya es un hash bcrypt válido
+        if data.password_hash:
+            if not is_bcrypt_hash(data.password_hash):
+                password_hash = hash_password(data.password_hash)
+            else:
+                password_hash = data.password_hash
+        else:
+            password_hash = data.password_hash
+        
         run_query(
             "UPDATE users SET id_person=%s, id_company=%s, id_role=%s, password_hash=%s WHERE id_user=%s",
             (data.id_person, data.id_company, data.id_role, password_hash, id_user)

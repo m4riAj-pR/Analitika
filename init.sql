@@ -94,7 +94,76 @@ CREATE TABLE channels (
     name VARCHAR(150) NOT NULL,
     description VARCHAR(255),
     id_campaign INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,Corrige un bug crítico en un backend FastAPI relacionado con la variable de entorno JWT_SECRET.
+
+CONTEXTO:
+El proyecto usa autenticación JWT (python-jose). Actualmente, SECRET_KEY se obtiene con:
+
+    SECRET_KEY = os.getenv("JWT_SECRET")
+
+Problema:
+Si JWT_SECRET no está definida en Railway (o entorno local), su valor es None.
+Esto provoca errores 500 en runtime al intentar:
+- crear tokens (create_access_token)
+- validar tokens (jwt.decode)
+
+El error es silencioso y difícil de diagnosticar.
+
+OBJETIVO:
+1. Validar que JWT_SECRET exista al arrancar el servidor
+2. Fallar inmediatamente con un error claro si no está definida
+3. Evitar que el sistema arranque en estado inválido
+
+IMPLEMENTACIÓN REQUERIDA:
+
+1) En app/main.py:
+
+- Agregar un evento @app.on_event("startup")
+- Dentro del evento:
+    - verificar os.getenv("JWT_SECRET")
+    - si no existe → lanzar RuntimeError con mensaje claro
+
+Ejemplo esperado:
+
+    import os
+    from fastapi import FastAPI
+
+    app = FastAPI()
+
+    @app.on_event("startup")
+    def validate_env():
+        if not os.getenv("JWT_SECRET"):
+            raise RuntimeError("JWT_SECRET no configurada en variables de entorno")
+
+2) En app/security.py:
+
+- Asegurar que SECRET_KEY se define así:
+
+    SECRET_KEY = os.getenv("JWT_SECRET")
+
+- Opcional: agregar validación defensiva adicional:
+
+    if not SECRET_KEY:
+        raise RuntimeError("JWT_SECRET no configurada")
+
+3) NO cambiar la lógica de generación de tokens existente
+4) NO hardcodear valores
+5) Mantener compatibilidad con Railway (variables de entorno)
+
+EXTRA (opcional pero recomendado):
+- Validar también DATABASE_URL en el mismo startup
+- Mensaje claro para debugging en producción
+
+Archivos a modificar:
+- app/main.py
+- app/security.py
+
+Resultado esperado:
+- Si JWT_SECRET no existe → el servidor NO arranca
+- Si existe → el sistema funciona normalmente
+- Se elimina el error 500 silencioso en /login
+
+No expliques nada, solo aplica los cambios y muestra el código final.
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (id_campaign) REFERENCES campaigns(id_campaign)
 );

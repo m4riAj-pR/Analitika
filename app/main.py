@@ -19,6 +19,26 @@ app = FastAPI(
     version="1.0.0"
 )
 
+
+@app.on_event("startup")
+def validate_environment():
+    """Valida que todas las variables de entorno críticas estén configuradas."""
+    required_vars = {
+        "JWT_SECRET": "Autenticación JWT",
+        "DATABASE_URL": "Conexión a Base de Datos"
+    }
+    
+    missing_vars = []
+    for var_name, description in required_vars.items():
+        if not os.getenv(var_name):
+            missing_vars.append(f"  - {var_name} ({description})")
+    
+    if missing_vars:
+        error_msg = "ERROR CRÍTICO: Variables de entorno no configuradas:\n" + "\n".join(missing_vars)
+        error_msg += "\n\nVerifica tu archivo .env o las variables en Railway/Render."
+        raise RuntimeError(error_msg)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_cors_origins(),
