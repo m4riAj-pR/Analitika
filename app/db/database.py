@@ -25,12 +25,12 @@ def get_connection():
         print("Database: ", url.path.lstrip('/'))
         print("Host: ", url.hostname)
         print("Port: ", url.port)
-        
+
         conn = pymysql.connect(
             host=url.hostname,
             port=url.port or 3306,
-            user=url.username,
-            password=url.password,
+            user="root",
+            password= "KALtosOfuJlKoDdiUpveLhvfvjcOBPKd",
             database=url.path.lstrip('/'),
             cursorclass=pymysql.cursors.DictCursor,
             connect_timeout=10
