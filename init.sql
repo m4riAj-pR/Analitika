@@ -3,10 +3,12 @@
 -- =====================
 CREATE TABLE persons (
     id_person INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100),
+    name VARCHAR(100) NOT NULL,
     lastname VARCHAR(100),
-    email VARCHAR(150) UNIQUE,
-    phone VARCHAR(50)
+    email VARCHAR(150) NOT NULL UNIQUE,
+    phone VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- =====================
@@ -14,7 +16,9 @@ CREATE TABLE persons (
 -- =====================
 CREATE TABLE roles (
     id_role INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100)
+    name VARCHAR(100) NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- =====================
@@ -22,8 +26,10 @@ CREATE TABLE roles (
 -- =====================
 CREATE TABLE permissions (
     id_permission INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100),
-    description VARCHAR(255)
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- =====================
@@ -31,8 +37,11 @@ CREATE TABLE permissions (
 -- =====================
 CREATE TABLE role_has_permissions (
     id_role_permission INT AUTO_INCREMENT PRIMARY KEY,
-    id_role INT,
-    id_permission INT,
+    id_role INT NOT NULL,
+    id_permission INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE(id_role, id_permission),
     FOREIGN KEY (id_role) REFERENCES roles(id_role),
     FOREIGN KEY (id_permission) REFERENCES permissions(id_permission)
 );
@@ -42,10 +51,11 @@ CREATE TABLE role_has_permissions (
 -- =====================
 CREATE TABLE users (
     id_user INT AUTO_INCREMENT PRIMARY KEY,
-    id_person INT,
-    id_company INT NULL, -- legacy
-    id_role INT,
-    password_hash VARCHAR(255),
+    id_person INT NOT NULL,
+    id_role INT NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (id_person) REFERENCES persons(id_person),
     FOREIGN KEY (id_role) REFERENCES roles(id_role)
 );
@@ -55,8 +65,10 @@ CREATE TABLE users (
 -- =====================
 CREATE TABLE companies (
     id_company INT AUTO_INCREMENT PRIMARY KEY,
-    id_user INT NULL, -- legacy creator
-    name VARCHAR(150),
+    id_user INT NULL,
+    name VARCHAR(150) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (id_user) REFERENCES users(id_user)
 );
 
@@ -65,10 +77,26 @@ CREATE TABLE companies (
 -- =====================
 CREATE TABLE user_company (
     id_user_company INT AUTO_INCREMENT PRIMARY KEY,
-    id_user INT,
-    id_company INT,
+    id_user INT NOT NULL,
+    id_company INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE(id_user, id_company),
     FOREIGN KEY (id_user) REFERENCES users(id_user),
     FOREIGN KEY (id_company) REFERENCES companies(id_company)
+);
+
+-- =====================
+-- CHANNELS
+-- =====================
+CREATE TABLE channels (
+    id_channel INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    description VARCHAR(255),
+    id_campaign INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_campaign) REFERENCES campaigns(id_campaign)
 );
 
 -- =====================
@@ -76,14 +104,18 @@ CREATE TABLE user_company (
 -- =====================
 CREATE TABLE campaigns (
     id_campaign INT AUTO_INCREMENT PRIMARY KEY,
-    id_company INT,
-    name VARCHAR(150),
+    id_company INT NOT NULL,
+    name VARCHAR(150) NOT NULL,
     description VARCHAR(255),
-    status ENUM('draft','active','paused','finished'),
+    status ENUM('draft','active','paused','finished') DEFAULT 'draft',
     start_date DATE,
     end_date DATE,
-    spent DECIMAL(10,2),
-    FOREIGN KEY (id_company) REFERENCES companies(id_company)
+    spent DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CHECK (start_date IS NULL OR end_date IS NULL OR start_date <= end_date),
+    FOREIGN KEY (id_company) REFERENCES companies(id_company),
+    INDEX idx_id_company (id_company)
 );
 
 -- =====================
@@ -91,8 +123,10 @@ CREATE TABLE campaigns (
 -- =====================
 CREATE TABLE tracking_links (
     id_link INT AUTO_INCREMENT PRIMARY KEY,
-    id_campaign INT,
-    destination TEXT,
+    id_campaign INT NOT NULL,
+    destination TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (id_campaign) REFERENCES campaigns(id_campaign)
 );
 
@@ -101,12 +135,17 @@ CREATE TABLE tracking_links (
 -- =====================
 CREATE TABLE clicks (
     id_click INT AUTO_INCREMENT PRIMARY KEY,
-    id_link INT,
-    ip_address VARCHAR(100),
+    id_link INT NOT NULL,
+    ip_address_hash VARCHAR(64),
+    consent_given BOOLEAN DEFAULT FALSE,
     user_agent TEXT,
     referrer TEXT,
     country VARCHAR(50),
     clicked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_id_link (id_link),
+    INDEX idx_clicked_at (clicked_at),
     FOREIGN KEY (id_link) REFERENCES tracking_links(id_link)
 );
 
@@ -115,24 +154,14 @@ CREATE TABLE clicks (
 -- =====================
 CREATE TABLE conversions (
     id_conversion INT AUTO_INCREMENT PRIMARY KEY,
-    id_campaign INT NULL, -- legacy
-    id_click INT,
+    id_click INT NOT NULL,
     revenue DECIMAL(10,2),
-    type VARCHAR(100),
+    type ENUM('sale','lead','signup','download','contact','other') NOT NULL DEFAULT 'other',
     source VARCHAR(100),
     notes TEXT,
-    FOREIGN KEY (id_campaign) REFERENCES campaigns(id_campaign),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_id_click (id_click),
     FOREIGN KEY (id_click) REFERENCES clicks(id_click)
 );
 
--- =====================
--- DATOS INICIALES (opcional)
--- =====================
-INSERT INTO roles (name) VALUES ('admin'), ('user');
-
-INSERT INTO permissions (name, description) VALUES
-('create_campaign', 'Crear campañas'),
-('view_reports', 'Ver reportes');
-
-INSERT INTO role_has_permissions (id_role, id_permission) VALUES
-(1,1),(1,2),(2,2);

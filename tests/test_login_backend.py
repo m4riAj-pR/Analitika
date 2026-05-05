@@ -1,15 +1,28 @@
 import hashlib
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
-from app.routers.auth import login_for_access_token
-from app.schemas.auth import LoginRequest
+from app.main import app
+from app.routers.auth import build_login_request, login_for_access_token, parse_form_encoded_body
 from app.schemas.users import User
 from app.security import hash_password, pwd_context, verify_and_upgrade_password
 from app.services.a_service import insert_user, update_user_service
+from starlette.middleware.cors import CORSMiddleware
 
 
 class PasswordMigrationTests(unittest.TestCase):
+    def test_build_login_request_accepts_username_alias(self):
+        data = build_login_request({"username": "ana@example.com", "password": "Secret123!"})
+
+        self.assertEqual(data.email, "ana@example.com")
+        self.assertEqual(data.password, "Secret123!")
+
+    def test_parse_form_encoded_body_supports_frontend_payload(self):
+        parsed = parse_form_encoded_body(b"username=ana%40example.com&password=Secret123%21")
+
+        self.assertEqual(parsed["username"], "ana@example.com")
+        self.assertEqual(parsed["password"], "Secret123!")
+
     def test_verify_and_upgrade_bcrypt_keeps_existing_hash(self):
         stored_hash = pwd_context.hash("Secret123!")
 
@@ -63,10 +76,38 @@ class UserPersistenceTests(unittest.TestCase):
         self.assertTrue(pwd_context.verify("Secret123!", params[3]))
 
 
-class LoginEndpointTests(unittest.TestCase):
+class AppConfigTests(unittest.TestCase):
+    def test_app_has_cors_middleware(self):
+        self.assertTrue(any(m.cls is CORSMiddleware for m in app.user_middleware))
+
+
+class LoginEndpointTests(unittest.IsolatedAsyncioTestCase):
     @patch("app.routers.auth.create_access_token", return_value="jwt-token")
     @patch("app.routers.auth.run_query")
-    def test_login_upgrades_legacy_md5_hash_after_successful_auth(self, mock_run_query, _mock_token):
+    async def test_login_accepts_form_urlencoded_username_payload(self, mock_run_query, _mock_token):
+        user_row = {
+            "id_user": 90,
+            "id_person": 10,
+            "id_company": 2,
+            "id_role": 2,
+            "password_hash": pwd_context.hash("Secret123!"),
+            "name": "Ana",
+            "lastname": "Parra",
+            "email": "ana@example.com",
+        }
+        mock_run_query.return_value = [user_row]
+        request = Mock()
+        request.headers = {"content-type": "application/x-www-form-urlencoded"}
+        request.body = AsyncMock(return_value=b"username=ana%40example.com&password=Secret123%21")
+
+        response = await login_for_access_token(request)
+
+        self.assertEqual(response["access_token"], "jwt-token")
+        self.assertEqual(mock_run_query.call_args.args[1], ("ana@example.com",))
+
+    @patch("app.routers.auth.create_access_token", return_value="jwt-token")
+    @patch("app.routers.auth.run_query")
+    async def test_login_upgrades_legacy_md5_hash_after_successful_auth(self, mock_run_query, _mock_token):
         legacy_md5 = hashlib.md5("Secret123!".encode("utf-8")).hexdigest()
         user_row = {
             "id_user": 88,
@@ -82,10 +123,11 @@ class LoginEndpointTests(unittest.TestCase):
             [user_row],
             None,
         ]
+        request = Mock()
+        request.headers = {"content-type": "application/json"}
+        request.body = AsyncMock(return_value=b'{"email":"  ana@example.com  ","password":"Secret123!"}')
 
-        response = login_for_access_token(
-            LoginRequest(email="  ana@example.com  ", password="Secret123!")
-        )
+        response = await login_for_access_token(request)
 
         self.assertEqual(response["access_token"], "jwt-token")
         self.assertEqual(mock_run_query.call_args_list[0].args[1], ("ana@example.com",))

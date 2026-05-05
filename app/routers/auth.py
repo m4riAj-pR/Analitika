@@ -1,5 +1,8 @@
-from fastapi import APIRouter, HTTPException, status
+import json
 import logging
+from urllib.parse import parse_qs
+
+from fastapi import APIRouter, HTTPException, Request, status
 
 from app.db.database import run_query
 from app.schemas.auth import LoginRequest, TokenResponse
@@ -9,8 +12,51 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Auth"])
 
 
+def build_login_request(payload: dict) -> LoginRequest:
+    email = payload.get("email") or payload.get("username")
+    password = payload.get("password")
+
+    if email is None or password is None:
+        raise HTTPException(status_code=400, detail="Email y password son requeridos")
+
+    return LoginRequest(email=str(email), password=str(password))
+
+
+def parse_form_encoded_body(raw_body: bytes) -> dict[str, str]:
+    body_text = raw_body.decode("utf-8")
+    parsed = parse_qs(body_text, keep_blank_values=True)
+    return {
+        key: values[0] if isinstance(values, list) and values else ""
+        for key, values in parsed.items()
+    }
+
+
+async def parse_login_request(request: Request) -> LoginRequest:
+    raw_body = await request.body()
+    if not raw_body:
+        raise HTTPException(status_code=400, detail="Email y password son requeridos")
+
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    parsers = ["json", "form"] if content_type != "application/x-www-form-urlencoded" else ["form", "json"]
+
+    for parser_name in parsers:
+        try:
+            if parser_name == "json":
+                payload = json.loads(raw_body.decode("utf-8"))
+            else:
+                payload = parse_form_encoded_body(raw_body)
+
+            if isinstance(payload, dict):
+                return build_login_request(payload)
+        except (UnicodeDecodeError, json.JSONDecodeError, HTTPException, ValueError, TypeError):
+            continue
+
+    raise HTTPException(status_code=400, detail="Email y password son requeridos")
+
+
 @router.post("/login", response_model=TokenResponse)
-def login_for_access_token(data: LoginRequest):
+async def login_for_access_token(request: Request):
+    data = await parse_login_request(request)
     email = data.email.strip()
 
     if not email or not data.password:
