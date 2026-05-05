@@ -67,20 +67,24 @@ async def login_for_access_token(request: Request, response: Response):
     try:
         result = run_query(
             """
-            SELECT u.id_user, u.id_person, u.id_role
-            FROM users u
-            JOIN persons p ON u.id_person = p.id_person
+            SELECT u.id_user, u.id_person, u.id_role, u.password_hash
+            FROM persons p
+            JOIN users u ON p.id_person = u.id_person
             WHERE LOWER(p.email) = LOWER(%s)
             """,
             (email,),
             fetch=True
         )
 
+
+        print("USER RESULT: ", result)
+
     except Exception as e:
         print("LOGIN DB ERROR:", str(e))
         raise HTTPException(status_code=500, detail="Database connection failed")
 
     if not result:
+        print("401 ERROR: Usuario no encontrado o result vacío.")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales invalidas")
 
     user = result[0]
@@ -91,11 +95,13 @@ async def login_for_access_token(request: Request, response: Response):
             user["password_hash"]
         )
         if not is_valid_password:
+            print("401 ERROR: La contraseña es inválida tras verificación.")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales invalidas")
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error al verificar contrasena para {email}: {str(e)}")
+        print(f"401 ERROR EXCEPTION: Falló la verificación de contraseña para {email}. Error: {str(e)}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales invalidas")
 
     if upgraded_hash:
@@ -127,7 +133,7 @@ async def login_for_access_token(request: Request, response: Response):
         "user": {
             "id_user": user["id_user"],
             "id_person": user["id_person"],
-            "id_company": user.get("id_company"),
+            #"id_company": user.get("id_company")
             "id_role": user["id_role"],
             "name": f"{user['name']} {user['lastname']}".strip(),
             "email": user["email"],
