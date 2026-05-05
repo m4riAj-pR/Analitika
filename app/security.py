@@ -125,7 +125,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
 
     result = run_query(
         """
-        SELECT u.id_user, u.id_person, u.id_company, u.id_role, p.name, p.lastname, p.email
+        SELECT u.id_user, u.id_person,u.id_role
         FROM users u
         JOIN persons p ON u.id_person = p.id_person
         WHERE u.id_user = %s
