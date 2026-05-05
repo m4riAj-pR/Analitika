@@ -5,31 +5,34 @@ from pymysql.cursors import DictCursor
 from urllib.parse import urlparse
 
 def get_connection():
-    database_url = os.getenv("DATABASE_URL")
+    db_url = os.getenv("DATABASE_URL")
 
-    if not database_url:
-        raise RuntimeError(
-            "ERROR CRÍTICO: DATABASE_URL no está configurada en las variables de entorno. "
-            "Verifica tu archivo .env o las variables en Railway."
+    if not db_url:
+        raise RuntimeError("DATABASE_URL no está definida")
+
+    url = urlparse(db_url)
+
+    print("DB CONNECT →", {
+        "host": url.hostname,
+        "port": url.port,
+        "user": url.username,
+        "db": url.path
+    })
+
+    try:
+        conn = pymysql.connect(
+            host=url.hostname,
+            port=url.port or 3306,
+            user=url.username,
+            password=url.password,
+            database=url.path.lstrip('/'),
+            cursorclass=pymysql.cursors.DictCursor,
+            connect_timeout=10
         )
-
-    if not database_url.startswith(("mysql://", "mysql+pymysql://")):
-        raise RuntimeError(
-            "ERROR CRÍTICO: DATABASE_URL debe ser una URL MySQL válida. "
-            "Formato esperado: mysql+pymysql://user:password@host:port/database"
-        )
-
-    # Parsear la URL de Railway
-    url = urlparse(database_url)
-
-    return pymysql.connect(
-        host=url.hostname,
-        port=url.port,
-        user=url.username,
-        password=url.password,
-        database=url.path[1:],  # quita el "/"
-        cursorclass=DictCursor
-    )
+        return conn
+    except Exception as e:
+        print("DB CONNECTION ERROR:", str(e))
+        raise RuntimeError("No se pudo conectar a la base de datos")
 
 def run_query(sql, params=None, fetch=False, return_lastrowid=False):
     conn = get_connection()

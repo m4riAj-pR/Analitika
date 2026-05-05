@@ -62,17 +62,21 @@ async def login_for_access_token(request: Request):
     if not email or not data.password:
         raise HTTPException(status_code=400, detail="Email y password son requeridos")
 
-    result = run_query(
-        """
-        SELECT u.id_user, u.id_person, u.id_company, u.id_role, u.password_hash,
-               p.name, p.lastname, p.email
-        FROM users u
-        JOIN persons p ON u.id_person = p.id_person
-        WHERE LOWER(p.email) = LOWER(%s)
-        """,
-        (email,),
-        fetch=True
-    )
+    try:
+        result = run_query(
+            """
+            SELECT u.id_user, u.id_person, u.id_company, u.id_role, u.password_hash,
+                   p.name, p.lastname, p.email
+            FROM users u
+            JOIN persons p ON u.id_person = p.id_person
+            WHERE LOWER(p.email) = LOWER(%s)
+            """,
+            (email,),
+            fetch=True
+        )
+    except Exception as e:
+        print("LOGIN DB ERROR:", str(e))
+        raise HTTPException(status_code=500, detail="Database connection failed")
 
     if not result:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales invalidas")
