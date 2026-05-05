@@ -20,6 +20,12 @@ def get_connection():
     })
 
     try:
+        print("Username: ", url.username)
+        print("Password: ", url.password)
+        print("Database: ", url.path.lstrip('/'))
+        print("Host: ", url.hostname)
+        print("Port: ", url.port)
+        
         conn = pymysql.connect(
             host=url.hostname,
             port=url.port or 3306,
