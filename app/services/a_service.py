@@ -411,7 +411,7 @@ def delete_conversion_service(id_conversion: int):
 # ---------------------------------------------------------------
 # AUTHORIZATION HELPERS
 # ---------------------------------------------------------------
-def _build_in_clause(values: list[int]) -> tuple[str, tuple]:
+def build_in_clause(values: list[int]) -> tuple[str, tuple]:
     placeholders = ", ".join(["%s"] * len(values))
     return f"({placeholders})", tuple(values)
 
@@ -499,7 +499,7 @@ def ensure_person_access(id_user: int, id_person: int) -> None:
     company_ids = get_user_company_ids(id_user)
     if not company_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
-    in_clause, params = _build_in_clause(company_ids)
+    in_clause, params = build_in_clause(company_ids)
     result = run_query(
         f"""
         SELECT p.id_person
@@ -521,7 +521,7 @@ def ensure_user_access(id_user: int, target_user_id: int) -> None:
     company_ids = get_user_company_ids(id_user)
     if not company_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
-    in_clause, params = _build_in_clause(company_ids)
+    in_clause, params = build_in_clause(company_ids)
     result = run_query(
         f"""
         SELECT u.id_user
@@ -540,7 +540,7 @@ def ensure_user_company_access(id_user: int, id_user_company: int) -> None:
     company_ids = get_user_company_ids(id_user)
     if not company_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
-    in_clause, params = _build_in_clause(company_ids)
+    in_clause, params = build_in_clause(company_ids)
     result = run_query(
         f"""
         SELECT id_user_company
@@ -576,7 +576,7 @@ def read_table_for_user(table: str, id_user: int):
     if table in {"role", "permissions", "role_has_permissions", "channels"}:
         return read_table(table)
 
-    in_clause, params = _build_in_clause(company_ids) if company_ids else ("(%s)", tuple())
+    in_clause, params = build_in_clause(company_ids) if company_ids else ("(%s)", tuple())
 
     if table == "companies":
         return run_query(

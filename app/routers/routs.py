@@ -313,7 +313,7 @@ def get_top_campaigns(limit: int = 5, current_user: dict = Depends(get_current_u
     company_ids = get_user_company_ids(current_user["id_user"])
     if not company_ids:
         return []
-    in_clause, params = _build_in_clause(company_ids)
+    in_clause, params = build_in_clause(company_ids)
     resultado = run_query(f"""
         SELECT c.id_campaign, c.name, 
                COALESCE(SUM(cv.revenue), 0) as ingresos,
