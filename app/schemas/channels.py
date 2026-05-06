@@ -4,5 +4,6 @@ from typing import Optional
 
 class Channel(BaseModel):
     id_channel: Optional[int] = None
+    id_campaign: Optional[int] = None
     name: str
     description: Optional[str] = None

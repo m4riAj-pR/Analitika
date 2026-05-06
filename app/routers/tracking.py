@@ -21,13 +21,17 @@ def landing_campana(id_link: int, request: Request):
 
     campana = resultado[0] if resultado else {"name": "Campaña no encontrada", "description": ""}
 
+    import hashlib
+    ip_address = request.client.host or "127.0.0.1"
+    ip_hash = hashlib.sha256(ip_address.encode()).hexdigest()
+
     # 2. Registra el clic
     run_query("""
-        INSERT INTO clicks (id_link, ip_address, user_agent, referrer, clicked_at)
+        INSERT INTO clicks (id_link, ip_address_hash, user_agent, referrer, clicked_at)
         VALUES (%s, %s, %s, %s, %s)
     """, (
         id_link,
-        request.client.host,
+        ip_hash,
         request.headers.get("user-agent"),
         request.headers.get("referer"),
         datetime.utcnow()
@@ -50,10 +54,12 @@ def get_metricas(id_campaign: int, current_user: dict = Depends(get_current_user
 
     # Conversiones e ingresos
     conversiones = run_query("""
-        SELECT COUNT(id_conversion) as total, 
-               COALESCE(SUM(revenue), 0) as ingresos
-        FROM conversions
-        WHERE id_campaign = %s
+        SELECT COUNT(cv.id_conversion) as total, 
+               COALESCE(SUM(cv.revenue), 0) as ingresos
+        FROM conversions cv
+        JOIN clicks c ON cv.id_click = c.id_click
+        JOIN tracking_links tl ON c.id_link = tl.id_link
+        WHERE tl.id_campaign = %s
     """, (id_campaign,), fetch=True)
 
     # Presupuesto invertido

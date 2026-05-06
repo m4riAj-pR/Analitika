@@ -18,12 +18,6 @@ from app.security import get_current_user
 
 router = APIRouter(prefix="/analitika", tags=["Analitika"])
 
-VALID_TABLES = {
-    "persons", "role", "permissions", "role_has_permissions",
-    "companies", "users", "user_company",
-    "campaigns", "channels", "tracking_links", "clicks", "conversions"
-}
-
 @router.get("/")
 def root(current_user: dict = Depends(get_current_user)):
     return {"message": "API conectada a analitika_db"}
@@ -42,11 +36,13 @@ def get_persons(current_user: dict = Depends(get_current_user)):
 
 @router.put("/persons/{id}")
 def update_person(id: int, data: Person, current_user: dict = Depends(get_current_user)):
+    ensure_person_access(current_user["id_user"], id)
     update_person_service(id, data)
     return {"ok": True}
 
 @router.delete("/persons/{id}")
 def delete_person(id: int, current_user: dict = Depends(get_current_user)):
+    ensure_person_access(current_user["id_user"], id)
     delete_person_service(id)
     return {"ok": True}
 
@@ -289,7 +285,7 @@ def delete_click(id: int, current_user: dict = Depends(get_current_user)):
 
 @router.post("/conversions")
 def create_conversion(data: Conversion, current_user: dict = Depends(get_current_user)):
-    ensure_campaign_access(current_user["id_user"], data.id_campaign)
+    ensure_click_access(current_user["id_user"], data.id_click)
     insert_conversion(data)
     return {"ok": True}
 
@@ -309,9 +305,11 @@ def delete_conversion(id: int, current_user: dict = Depends(get_current_user)):
     delete_conversion_service(id)
     return {"ok": True}
 
+
+# ANALYTICS ----------------
+
 @router.get("/campaigns/top")
 def get_top_campaigns(limit: int = 5, current_user: dict = Depends(get_current_user)):
-    from app.db.database import run_query
     company_ids = get_user_company_ids(current_user["id_user"])
     if not company_ids:
         return []
@@ -322,7 +320,9 @@ def get_top_campaigns(limit: int = 5, current_user: dict = Depends(get_current_u
                c.spent,
                COALESCE(SUM(cv.revenue), 0) - c.spent as beneficio
         FROM campaigns c
-        LEFT JOIN conversions cv ON c.id_campaign = cv.id_campaign
+        LEFT JOIN tracking_links tl ON c.id_campaign = tl.id_campaign
+        LEFT JOIN clicks cl ON tl.id_link = cl.id_link
+        LEFT JOIN conversions cv ON cl.id_click = cv.id_click
         WHERE c.id_company IN {in_clause}
         GROUP BY c.id_campaign
         ORDER BY beneficio DESC

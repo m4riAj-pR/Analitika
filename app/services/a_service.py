@@ -177,8 +177,8 @@ def insert_user(data: User):
     try:
         password_hash = hash_password(data.password_hash)
         id_user = run_query(
-            "INSERT INTO users (id_person, id_company, id_role, password_hash) VALUES (%s, %s, %s, %s)",
-            (data.id_person, data.id_company, data.id_role, password_hash),
+            "INSERT INTO users (id_person, id_role, password_hash) VALUES (%s, %s, %s)",
+            (data.id_person, data.id_role, password_hash),
             return_lastrowid=True
         )
         if data.id_company is not None:
@@ -202,8 +202,8 @@ def update_user_service(id_user: int, data: User):
             password_hash = data.password_hash
         
         run_query(
-            "UPDATE users SET id_person=%s, id_company=%s, id_role=%s, password_hash=%s WHERE id_user=%s",
-            (data.id_person, data.id_company, data.id_role, password_hash, id_user)
+            "UPDATE users SET id_person=%s, id_role=%s, password_hash=%s WHERE id_user=%s",
+            (data.id_person, data.id_role, password_hash, id_user)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al actualizar usuario: {e}")
@@ -386,8 +386,8 @@ def delete_click_service(id_click: int):
 def insert_conversion(data: Conversion):
     try:
         run_query(
-            "INSERT INTO conversions (id_campaign, id_click, revenue, type, source, notes) VALUES (%s, %s, %s, %s, %s, %s)",
-            (data.id_campaign, data.id_click, float(data.revenue), data.type, data.source, data.notes)
+            "INSERT INTO conversions (id_click, revenue, type, source, notes) VALUES (%s, %s, %s, %s, %s)",
+            (data.id_click, float(data.revenue), data.type, data.source, data.notes)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al insertar conversión: {e}")
@@ -395,8 +395,8 @@ def insert_conversion(data: Conversion):
 def update_conversion_service(id_conversion: int, data: Conversion):
     try:
         run_query(
-            "UPDATE conversions SET id_campaign=%s, id_click=%s, revenue=%s, type=%s, source=%s, notes=%s WHERE id_conversion=%s",
-            (data.id_campaign, data.id_click, float(data.revenue), data.type, data.source, data.notes, id_conversion)
+            "UPDATE conversions SET id_click=%s, revenue=%s, type=%s, source=%s, notes=%s WHERE id_conversion=%s",
+            (data.id_click, float(data.revenue), data.type, data.source, data.notes, id_conversion)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al actualizar conversión: {e}")
@@ -423,15 +423,7 @@ def get_user_company_ids(id_user: int) -> list[int]:
         fetch=True
     )
     company_ids = [row["id_company"] for row in rows]
-    if company_ids:
-        return company_ids
-
-    legacy = run_query(
-        "SELECT id_company FROM users WHERE id_user=%s AND id_company IS NOT NULL",
-        (id_user,),
-        fetch=True
-    )
-    return [row["id_company"] for row in legacy]
+    return company_ids
 
 
 def ensure_company_access(id_user: int, id_company: int) -> None:
@@ -501,6 +493,26 @@ def ensure_conversion_access(id_user: int, id_conversion: int) -> None:
     if not result or result[0]["id_company"] is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversión no encontrada")
     ensure_company_access(id_user, result[0]["id_company"])
+
+
+def ensure_person_access(id_user: int, id_person: int) -> None:
+    company_ids = get_user_company_ids(id_user)
+    if not company_ids:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
+    in_clause, params = _build_in_clause(company_ids)
+    result = run_query(
+        f"""
+        SELECT p.id_person
+        FROM persons p
+        JOIN users u ON p.id_person = u.id_person
+        JOIN user_company uc ON u.id_user = uc.id_user
+        WHERE p.id_person=%s AND uc.id_company IN {in_clause}
+        """,
+        (id_person, *params),
+        fetch=True
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
 
 
 def ensure_user_access(id_user: int, target_user_id: int) -> None:
@@ -646,7 +658,9 @@ def read_table_for_user(table: str, id_user: int):
             f"""
             SELECT cv.*
             FROM conversions cv
-            JOIN campaigns c ON cv.id_campaign = c.id_campaign
+            JOIN clicks ck ON cv.id_click = ck.id_click
+            JOIN tracking_links tl ON ck.id_link = tl.id_link
+            JOIN campaigns c ON tl.id_campaign = c.id_campaign
             WHERE c.id_company IN {in_clause}
             ORDER BY cv.id_conversion
             """,

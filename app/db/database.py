@@ -5,40 +5,29 @@ from pymysql.cursors import DictCursor
 from urllib.parse import urlparse
 
 def get_connection():
-    db_url = "mysql+pymysql://root:KALtosOfuJlKoDdiUpveLhvfvjcOBPKd@metro.proxy.rlwy.net:10028/railway"
-
+    # Priorizar DATABASE_URL de las variables de entorno
+    db_url = os.getenv("DATABASE_URL")
+    
+    # Fallback solo para desarrollo local si no hay env var
     if not db_url:
-        raise RuntimeError("DATABASE_URL no está definida")
+        db_url = "mysql+pymysql://root:KALtosOfuJlKoDdiUpveLhvfvjcOBPKd@metro.proxy.rlwy.net:10028/railway"
 
     url = urlparse(db_url)
 
-    print("DB CONNECT →", {
-        "host": url.hostname,
-        "port": url.port,
-        "user": url.username,
-        "db": url.path
-    })
-
     try:
-        print("Username: ", url.username)
-        print("Password: ", url.password)
-        print("Database: ", url.path.lstrip('/'))
-        print("Host: ", url.hostname)
-        print("Port: ", url.port)
-
         conn = pymysql.connect(
             host=url.hostname,
             port=url.port or 3306,
-            user="root",
-            password= "KALtosOfuJlKoDdiUpveLhvfvjcOBPKd",
+            user=url.username or "root",
+            password=url.password or "KALtosOfuJlKoDdiUpveLhvfvjcOBPKd",
             database=url.path.lstrip('/'),
             cursorclass=pymysql.cursors.DictCursor,
             connect_timeout=10
         )
         return conn
     except Exception as e:
-        print("DB CONNECTION ERROR:", str(e))
-        raise RuntimeError("No se pudo conectar a la base de datos")
+        # En producción no imprimimos el error crudo para no filtrar credenciales
+        raise RuntimeError(f"Error de conexión a la base de datos")
 
 def run_query(sql, params=None, fetch=False, return_lastrowid=False):
     conn = get_connection()
@@ -66,8 +55,10 @@ def run_query(sql, params=None, fetch=False, return_lastrowid=False):
         return None
 
     except Exception as e:
-        conn.rollback()
+        if conn:
+            conn.rollback()
         raise e
 
     finally:
-        conn.close()
+        if conn:
+            conn.close()
