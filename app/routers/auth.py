@@ -58,8 +58,6 @@ async def parse_login_request(request: Request) -> LoginRequest:
 async def login_for_access_token(request: Request, response: Response):
     data = await parse_login_request(request)
     email = data.email.strip()
-    print("EMAIL: ", email)
-    print("PASSWORD: ", data.password)
 
     if not email or not data.password:
         raise HTTPException(status_code=400, detail="Email y password son requeridos")
@@ -67,7 +65,14 @@ async def login_for_access_token(request: Request, response: Response):
     try:
         result = run_query(
             """
-            SELECT u.id_user, u.id_person, u.id_role, u.password_hash
+            SELECT
+                u.id_user,
+                u.id_person,
+                u.id_role,
+                u.password_hash,
+                p.name,
+                p.lastname,
+                p.email
             FROM persons p
             JOIN users u ON p.id_person = u.id_person
             WHERE LOWER(p.email) = LOWER(%s)
@@ -75,9 +80,6 @@ async def login_for_access_token(request: Request, response: Response):
             (email,),
             fetch=True
         )
-
-
-        print("USER RESULT: ", result)
 
     except Exception as e:
         print("LOGIN DB ERROR:", str(e))

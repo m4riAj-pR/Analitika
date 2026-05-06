@@ -9,17 +9,12 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
+from app.config import get_required_env
 from app.db.database import run_query
 
 logger = logging.getLogger(__name__)
 
-SECRET_KEY = os.getenv("JWT_SECRET")
-if not SECRET_KEY:
-    raise RuntimeError(
-        "ERROR CRÍTICO: JWT_SECRET no está configurada en las variables de entorno. "
-        "Verifica tu archivo .env o las variables en Railway."
-    )
-
+SECRET_KEY = get_required_env("JWT_SECRET", "Autenticacion JWT")
 ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
 

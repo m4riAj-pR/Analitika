@@ -27,12 +27,12 @@ def validate_environment():
         "JWT_SECRET": "Autenticación JWT",
         "DATABASE_URL": "Conexión a Base de Datos"
     }
-    
+
     missing_vars = []
     for var_name, description in required_vars.items():
         if not os.getenv(var_name):
             missing_vars.append(f"  - {var_name} ({description})")
-    
+
     if missing_vars:
         error_msg = "ERROR CRÍTICO: Variables de entorno no configuradas:\n" + "\n".join(missing_vars)
         error_msg += "\n\nVerifica tu archivo .env o las variables en Railway/Render."

@@ -4,23 +4,24 @@ import pymysql
 from pymysql.cursors import DictCursor
 from urllib.parse import urlparse
 
+
 def get_connection():
-    # Priorizar DATABASE_URL de las variables de entorno
     db_url = os.getenv("DATABASE_URL")
-    
-    # Fallback solo para desarrollo local si no hay env var
     if not db_url:
-        db_url = "mysql+pymysql://root:KALtosOfuJlKoDdiUpveLhvfvjcOBPKd@metro.proxy.rlwy.net:10028/railway"
+        raise RuntimeError("DATABASE_URL no configurada. Verifica tu archivo .env.")
 
     url = urlparse(db_url)
+    database = url.path.lstrip("/")
+    if not url.hostname or not url.username or not database:
+        raise RuntimeError("DATABASE_URL invalida. Usa mysql+pymysql://usuario:password@host:puerto/base")
 
     try:
         conn = pymysql.connect(
             host=url.hostname,
             port=url.port or 3306,
-            user=url.username or "root",
-            password=url.password or "KALtosOfuJlKoDdiUpveLhvfvjcOBPKd",
-            database=url.path.lstrip('/'),
+            user=url.username,
+            password=url.password or "",
+            database=database,
             cursorclass=pymysql.cursors.DictCursor,
             connect_timeout=10
         )
