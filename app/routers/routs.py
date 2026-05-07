@@ -189,8 +189,8 @@ def delete_user_company(id: int, current_user: dict = Depends(get_current_user))
 @router.post("/campaigns")
 def create_campaign(data: Campaign, current_user: dict = Depends(get_current_user)):
     ensure_company_access(current_user["id_user"], data.id_company)
-    insert_campaign(data)
-    return {"ok": True}
+    id_campaign = insert_campaign(data)
+    return {"ok": True, "id_campaign": id_campaign}
 
 @router.get("/campaigns")
 def get_campaigns(current_user: dict = Depends(get_current_user)):
@@ -236,8 +236,8 @@ def delete_channel(id: int, current_user: dict = Depends(get_current_user)):
 @router.post("/tracking-links")
 def create_tracking_link(data: TrackingLink, current_user: dict = Depends(get_current_user)):
     ensure_campaign_access(current_user["id_user"], data.id_campaign)
-    insert_tracking_link(data)
-    return {"ok": True}
+    id_link = insert_tracking_link(data)
+    return {"ok": True, "id_link": id_link}
 
 @router.get("/tracking-links")
 def get_tracking_links(current_user: dict = Depends(get_current_user)):

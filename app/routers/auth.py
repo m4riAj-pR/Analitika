@@ -5,7 +5,7 @@ from urllib.parse import parse_qs
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from app.db.database import run_query
-from app.schemas.auth import LoginRequest, TokenResponse
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 from app.security import create_access_token, hash_password, verify_and_upgrade_password
 
 logger = logging.getLogger(__name__)
@@ -129,26 +129,46 @@ async def login_for_access_token(request: Request, response: Response):
             detail="Error al generar token de autenticacion"
         )
 
+    # Obtener empresas asociadas al usuario
+    try:
+        companies_result = run_query(
+            """
+            SELECT c.id_company, c.name
+            FROM companies c
+            JOIN user_company uc ON c.id_company = uc.id_company
+            WHERE uc.id_user = %s
+            """,
+            (user["id_user"],),
+            fetch=True
+        )
+        companies = [{"id_company": c["id_company"], "name": c["name"]} for c in companies_result]
+        print(f"DEBUG: Empresas encontradas para user {user['id_user']}: {companies}")
+    except Exception as e:
+        print(f"DEBUG ERROR: Al obtener empresas - {str(e)}")
+        companies = []
+
     return {
         "access_token": token,
         "token_type": "bearer",
         "user": {
             "id_user": user["id_user"],
             "id_person": user["id_person"],
-            #"id_company": user.get("id_company")
             "id_role": user["id_role"],
             "name": f"{user['name']} {user['lastname']}".strip(),
             "email": user["email"],
+            "companies": companies,
         },
     }
 
 
 @router.post("/register", status_code=201)
-def register_user(data: LoginRequest):
+def register_user(data: RegisterRequest):
     """
     Endpoint publico de registro. No requiere token JWT.
-    Recibe: email, password, first_name (opcional), last_name (opcional), phone (opcional), company (opcional)
+    Recibe: email, password, first_name (opcional), last_name (opcional), phone (opcional).
     Crea persona + usuario con contrasena hasheada en bcrypt y devuelve token listo para usar.
+    Nota: id_company NO se incluye en el INSERT para evitar FK violations;
+    el usuario queda sin empresa hasta crearla o ser invitado.
     """
     email = data.email.strip()
 
@@ -182,11 +202,29 @@ def register_user(data: LoginRequest):
 
     id_person = person[0]["id_person"]
 
+    # CORRECCIÓN: la tabla users real requiere columna 'username' (NOT NULL UNIQUE)
+    # Usamos la parte local del email como username
+    username = email.split('@')[0]
     hashed = hash_password(data.password)
     id_user = run_query(
-        "INSERT INTO users (id_person, id_company, id_role, password_hash) VALUES (%s, %s, %s, %s)",
-        (id_person, None, 2, hashed),
+        "INSERT INTO users (id_person, id_role, username, password_hash) VALUES (%s, %s, %s, %s)",
+        (id_person, 2, username, hashed),
         return_lastrowid=True
+    )
+
+    # Crear empresa para el usuario
+    input_company = getattr(data, "company", None)
+    company_name = input_company.strip() if input_company and input_company.strip() else f"Empresa de {name}"
+    id_company = run_query(
+        "INSERT INTO companies (id_user, name) VALUES (%s, %s)",
+        (id_user, company_name),
+        return_lastrowid=True
+    )
+
+    # Asociar en la tabla intermedia
+    run_query(
+        "INSERT INTO user_company (id_user, id_company) VALUES (%s, %s)",
+        (id_user, id_company)
     )
 
     token = create_access_token({"sub": email, "id_user": id_user})
@@ -197,9 +235,9 @@ def register_user(data: LoginRequest):
         "user": {
             "id_user": id_user,
             "id_person": id_person,
-            "id_company": None,
             "id_role": 2,
             "name": f"{name} {lastname}".strip(),
             "email": email,
+            "companies": [{"id_company": id_company, "name": company_name}],
         },
     }

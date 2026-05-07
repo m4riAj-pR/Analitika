@@ -19,7 +19,11 @@ def landing_campana(id_link: int, request: Request):
         WHERE tl.id_link = %s
     """, (id_link,), fetch=True)
 
-    campana = resultado[0] if resultado else {"name": "Campaña no encontrada", "description": ""}
+    if not resultado:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Link de seguimiento no encontrado")
+
+    campana = resultado[0]
 
     import hashlib
     ip_address = request.client.host or "127.0.0.1"

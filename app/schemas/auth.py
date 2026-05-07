@@ -7,6 +7,13 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class RegisterRequest(LoginRequest):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    company: Optional[str] = None
+
+
 class UserPublic(BaseModel):
     id_user: int
     id_person: int
@@ -14,6 +21,7 @@ class UserPublic(BaseModel):
     id_role: int
     name: str
     email: str
+    companies: Optional[list] = None
 
 
 class TokenResponse(BaseModel):

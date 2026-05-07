@@ -137,10 +137,18 @@ def delete_role_permission_service(id_role_permission: int):
 # ---------------------------------------------------------------
 def insert_company(data: Company):
     try:
-        run_query(
+        # Insertar empresa
+        id_company = run_query(
             "INSERT INTO companies (id_user, name) VALUES (%s, %s)",
-            (data.id_user, data.name)
+            (data.id_user, data.name),
+            return_lastrowid=True
         )
+        # Crear relación en tabla intermedia
+        if data.id_user:
+            run_query(
+                "INSERT INTO user_company (id_user, id_company) VALUES (%s, %s)",
+                (data.id_user, id_company)
+            )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al insertar empresa: {e}")
 
@@ -176,9 +184,16 @@ def delete_company_service(id_company: int):
 def insert_user(data: User):
     try:
         password_hash = hash_password(data.password_hash)
+        # CORRECCIÓN: id_company no va en INSERT; username es requerido (NOT NULL UNIQUE)
+        # Se usa la parte local del email de la persona como username
+        person_row = run_query(
+            "SELECT email FROM persons WHERE id_person=%s", (data.id_person,), fetch=True
+        )
+        email_val = person_row[0]['email'] if person_row else str(data.id_person)
+        username = email_val.split('@')[0]
         id_user = run_query(
-            "INSERT INTO users (id_person, id_role, password_hash) VALUES (%s, %s, %s)",
-            (data.id_person, data.id_role, password_hash),
+            "INSERT INTO users (id_person, id_role, username, password_hash) VALUES (%s, %s, %s, %s)",
+            (data.id_person, data.id_role, username, password_hash),
             return_lastrowid=True
         )
         if data.id_company is not None:
@@ -209,8 +224,12 @@ def update_user_service(id_user: int, data: User):
         raise HTTPException(status_code=400, detail=f"Error al actualizar usuario: {e}")
 
 def delete_user_service(id_user: int):
+    # CORRECCIÓN: users NO tiene id_company; verificar a través de user_company
     result = run_query(
-        "SELECT COUNT(*) AS total FROM campaigns WHERE id_company IN (SELECT id_company FROM users WHERE id_user=%s)",
+        """
+        SELECT COUNT(*) AS total FROM campaigns
+        WHERE id_company IN (SELECT id_company FROM user_company WHERE id_user=%s)
+        """,
         (id_user,), fetch=True
     )
     if result[0]['total'] > 0:
@@ -245,9 +264,10 @@ def delete_user_company_service(id_user_company: int):
 # ---------------------------------------------------------------
 def insert_campaign(data: Campaign):
     try:
-        run_query(
+        return run_query(
             "INSERT INTO campaigns (id_company, name, description, status, start_date, end_date, spent) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (data.id_company, data.name, data.description, data.status, data.start_date, data.end_date, data.spent)
+            (data.id_company, data.name, data.description, data.status, data.start_date, data.end_date, data.spent),
+            return_lastrowid=True
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al insertar campaña: {e}")
@@ -266,8 +286,16 @@ def delete_campaign_service(id_campaign: int):
         "SELECT COUNT(*) AS total FROM tracking_links WHERE id_campaign=%s",
         (id_campaign,), fetch=True
     )
+    # CORRECCIÓN: conversions NO tiene columna id_campaign directa.
+    # Se verifica a través de clicks → tracking_links → campaigns.
     result_conversions = run_query(
-        "SELECT COUNT(*) AS total FROM conversions WHERE id_campaign=%s",
+        """
+        SELECT COUNT(*) AS total
+        FROM conversions cv
+        JOIN clicks ck ON cv.id_click = ck.id_click
+        JOIN tracking_links tl ON ck.id_link = tl.id_link
+        WHERE tl.id_campaign = %s
+        """,
         (id_campaign,), fetch=True
     )
     if result_links[0]['total'] > 0 or result_conversions[0]['total'] > 0:
@@ -317,9 +345,10 @@ def delete_channel_service(id_channel: int):
 # ---------------------------------------------------------------
 def insert_tracking_link(data: TrackingLink):
     try:
-        run_query(
+        return run_query(
             "INSERT INTO tracking_links (id_campaign, id_channel, destination) VALUES (%s, %s, %s)",
-            (data.id_campaign, data.id_channel, data.destination)
+            (data.id_campaign, data.id_channel, data.destination),
+            return_lastrowid=True
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al insertar tracking link: {e}")
@@ -352,8 +381,8 @@ def delete_tracking_link_service(id_link: int):
 def insert_click(data: Click):
     try:
         run_query(
-            "INSERT INTO clicks (id_link, ip_address, user_agent, referrer, country, clicked_at) VALUES (%s, %s, %s, %s, %s, %s)",
-            (data.id_link, data.ip_address, data.user_agent, data.referrer, data.country, data.clicked_at)
+            "INSERT INTO clicks (id_link, ip_address_hash, consent_given, user_agent, referrer, country, clicked_at) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (data.id_link, data.ip_address_hash, data.consent_given, data.user_agent, data.referrer, data.country, data.clicked_at)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al insertar click: {e}")
@@ -361,8 +390,8 @@ def insert_click(data: Click):
 def update_click_service(id_click: int, data: Click):
     try:
         run_query(
-            "UPDATE clicks SET id_link=%s, ip_address=%s, user_agent=%s, referrer=%s, country=%s, clicked_at=%s WHERE id_click=%s",
-            (data.id_link, data.ip_address, data.user_agent, data.referrer, data.country, data.clicked_at, id_click)
+            "UPDATE clicks SET id_link=%s, ip_address_hash=%s, consent_given=%s, user_agent=%s, referrer=%s, country=%s, clicked_at=%s WHERE id_click=%s",
+            (data.id_link, data.ip_address_hash, data.consent_given, data.user_agent, data.referrer, data.country, data.clicked_at, id_click)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al actualizar click: {e}")
@@ -417,13 +446,25 @@ def build_in_clause(values: list[int]) -> tuple[str, tuple]:
 
 
 def get_user_company_ids(id_user: int) -> list[int]:
+    # Buscar en tabla intermedia user_company
     rows = run_query(
         "SELECT id_company FROM user_company WHERE id_user=%s",
         (id_user,),
         fetch=True
     )
     company_ids = [row["id_company"] for row in rows]
-    return company_ids
+    
+    # También buscar en tabla companies (por si el usuario es propietario directo)
+    company_owner_rows = run_query(
+        "SELECT id_company FROM companies WHERE id_user=%s",
+        (id_user,),
+        fetch=True
+    )
+    owner_company_ids = [row["id_company"] for row in company_owner_rows]
+    
+    # Combinar y eliminar duplicados
+    all_company_ids = list(set(company_ids + owner_company_ids))
+    return all_company_ids
 
 
 def ensure_company_access(id_user: int, id_company: int) -> None:
@@ -477,14 +518,15 @@ def ensure_click_access(id_user: int, id_click: int) -> None:
 
 
 def ensure_conversion_access(id_user: int, id_conversion: int) -> None:
+    # CORRECCIÓN: conversions NO tiene columna id_campaign directa.
+    # Se obtiene id_company a través de clicks → tracking_links → campaigns.
     result = run_query(
         """
-        SELECT COALESCE(c1.id_company, c2.id_company) AS id_company
+        SELECT c.id_company
         FROM conversions cv
-        LEFT JOIN campaigns c1 ON cv.id_campaign = c1.id_campaign
-        LEFT JOIN clicks ck ON cv.id_click = ck.id_click
-        LEFT JOIN tracking_links tl ON ck.id_link = tl.id_link
-        LEFT JOIN campaigns c2 ON tl.id_campaign = c2.id_campaign
+        JOIN clicks ck ON cv.id_click = ck.id_click
+        JOIN tracking_links tl ON ck.id_link = tl.id_link
+        JOIN campaigns c ON tl.id_campaign = c.id_campaign
         WHERE cv.id_conversion=%s
         """,
         (id_conversion,),
@@ -600,8 +642,8 @@ def read_table_for_user(table: str, id_user: int):
 
     if table == "user_company":
         return run_query(
-            f"SELECT * FROM user_company WHERE id_company IN {in_clause} ORDER BY id_user_company",
-            params,
+            "SELECT * FROM user_company WHERE id_user = %s ORDER BY id_user_company",
+            (id_user,),
             fetch=True
         )
 

@@ -136,7 +136,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     return {
         "id_user": user["id_user"],
         "id_person": user["id_person"],
-        "id_company": user.get("id_company"),
+        "id_company": None,  # Se resuelve via user_company cuando es necesario
         "id_role": user["id_role"],
         "name": f"{user['name']} {user['lastname']}".strip(),
         "email": user["email"],
