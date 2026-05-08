@@ -203,6 +203,11 @@ def delete_user_company(id: int, current_user: dict = Depends(get_current_user))
 @router.post("/campaigns")
 def create_campaign(data: Campaign, current_user: dict = Depends(get_current_user)):
     ensure_company_access(current_user["id_user"], data.id_company, current_user["id_role"])
+    
+    # Verificación de seguridad: No años anteriores
+    if data.start_date and data.start_date.year < datetime.now().year:
+        raise HTTPException(status_code=400, detail="No se pueden crear campañas para años anteriores.")
+        
     id_campaign = insert_campaign(data)
     return {"ok": True, "id_campaign": id_campaign}
 
@@ -213,6 +218,11 @@ def get_campaigns(current_user: dict = Depends(get_current_user)):
 @router.put("/campaigns/{id}")
 def update_campaign(id: int, data: Campaign, current_user: dict = Depends(get_current_user)):
     ensure_campaign_access(current_user["id_user"], id, current_user["id_role"])
+    
+    # Verificación de seguridad: No años anteriores
+    if data.start_date and data.start_date.year < datetime.now().year:
+        raise HTTPException(status_code=400, detail="No se pueden crear campañas para años anteriores.")
+        
     update_campaign_service(id, data)
     return {"ok": True}
 
