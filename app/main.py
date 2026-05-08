@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import auth, routs, tracking, notifications
+from app.routers import auth, routs, tracking, notifications, admin
 
 
 def get_cors_origins() -> list[str]:
@@ -53,6 +53,7 @@ app.include_router(routs.router)
 app.include_router(tracking.router)
 app.include_router(auth.router)
 app.include_router(notifications.router, prefix="/analitika/notifications", tags=["notifications"])
+app.include_router(admin.router, prefix="/analitika/admin", tags=["admin"])
 
 
 @app.get("/")

@@ -224,5 +224,10 @@ CREATE TABLE `notifications` (
 
 SET FOREIGN_KEY_CHECKS = 1;
 
--- Seed initial roles
-INSERT INTO `roles` (`name`) VALUES ('admin'), ('user') ON DUPLICATE KEY UPDATE name=name;
+-- Seed initial roles with fixed IDs
+INSERT INTO `roles` (`id_role`, `name`) VALUES 
+(1, 'Super_Admin'), 
+(2, 'Owner'), 
+(3, 'Manager') 
+ON DUPLICATE KEY UPDATE name=VALUES(name);
+
