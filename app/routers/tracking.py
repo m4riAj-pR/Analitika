@@ -13,15 +13,38 @@ env = Environment(loader=FileSystemLoader("app/templates"))
 
 def get_country_from_ip(ip: str, id_click: int):
     try:
-        # No usamos ip-api con localhost
+        # Identificar IPs locales/privadas -> Por defecto Colombia para pruebas locales
         if ip in ["127.0.0.1", "localhost", "::1"]:
+            run_query("UPDATE clicks SET country = %s WHERE id_click = %s", ("Colombia", id_click))
+            return
+        
+        # Check para rangos privados
+        is_private = False
+        if ip.startswith("192.168.") or ip.startswith("10."):
+            is_private = True
+        elif ip.startswith("172."):
+            try:
+                second_octet = int(ip.split(".")[1])
+                if 16 <= second_octet <= 31:
+                    is_private = True
+            except: pass
+            
+        if is_private:
+            run_query("UPDATE clicks SET country = %s WHERE id_click = %s", ("Colombia", id_click))
             return
         
         with urllib.request.urlopen(f"http://ip-api.com/json/{ip}?fields=status,country", timeout=3) as response:
             data = json.loads(response.read().decode())
             if data.get("status") == "success":
                 run_query("UPDATE clicks SET country = %s WHERE id_click = %s", (data.get("country"), id_click))
+            else:
+                # Si falla ip-api, usamos Colombia por defecto
+                run_query("UPDATE clicks SET country = %s WHERE id_click = %s", ("Colombia", id_click))
     except Exception as e:
+        # En caso de error, también ponemos Colombia por defecto
+        try:
+            run_query("UPDATE clicks SET country = %s WHERE id_click = %s", ("Colombia", id_click))
+        except: pass
         print(f"Error en geolocalización: {e}")
 
 @router.get("/c/{id_link}")
