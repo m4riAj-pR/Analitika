@@ -333,10 +333,17 @@ def get_top_campaigns(limit: int = 5, current_user: dict = Depends(get_current_u
 
 # NOTIFICATIONS ----------------
 @router.get("/notifications")
+@router.get("/notifications/")
 def get_notifications(current_user: dict = Depends(get_current_user)):
     return get_user_notifications(current_user["id_user"])
 
+@router.get("/notifications/unread-count")
+@router.get("/notifications/unread-count/")
+def get_unread_count(current_user: dict = Depends(get_current_user)):
+    return {"count": get_unread_count_service(current_user["id_user"])}
+
 @router.put("/notifications/{id}/read")
+@router.put("/notifications/{id}/read/")
 def mark_read(id: int, current_user: dict = Depends(get_current_user)):
     mark_notification_read(id)
     return {"ok": True}

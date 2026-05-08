@@ -215,6 +215,7 @@ CREATE TABLE `notifications` (
   `id_user` INT NOT NULL,
   `title` VARCHAR(150) NOT NULL,
   `message` TEXT NOT NULL,
+  `type` VARCHAR(50) DEFAULT 'info',
   `is_read` TINYINT(1) DEFAULT '0',
   `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id_notification`),

@@ -5,6 +5,7 @@ from datetime import datetime
 class NotificationBase(BaseModel):
     title: str
     message: str
+    type: Optional[str] = "info"
     is_read: Optional[bool] = False
 
 class NotificationCreate(NotificationBase):

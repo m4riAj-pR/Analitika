@@ -16,24 +16,8 @@ from app.schemas.clicks import Click
 from app.schemas.conversions import Conversion
 from app.security import hash_password, is_bcrypt_hash
 
-# ---------------------------------------------------------------
-# NOTIFICATIONS & ANALYSIS
-# ---------------------------------------------------------------
+# NOTIFICATIONS & ANALYSIS logic is at the end of the file
 
-def get_user_notifications(id_user: int):
-    """
-    Retorna las notificaciones del usuario, ordenadas por fecha descendente.
-    """
-    return run_query(
-        "SELECT id_notification, title, message, type, is_read, created_at FROM notifications WHERE id_user=%s ORDER BY created_at DESC",
-        (id_user,), fetch=True
-    )
-
-def mark_notification_read(id_notification: int):
-    """
-    Marca una notificación como leída.
-    """
-    run_query("UPDATE notifications SET is_read=1 WHERE id_notification=%s", (id_notification,))
 
 def generate_auto_recommendations(id_user: int):
     """
@@ -907,4 +891,16 @@ def mark_notification_read(id_notification: int):
         "UPDATE notifications SET is_read = TRUE WHERE id_notification = %s",
         (id_notification,)
     )
+
+def get_unread_count_service(id_user: int):
+    """
+    Retorna el conteo de notificaciones no leídas para un usuario.
+    """
+    result = run_query(
+        "SELECT COUNT(*) as unread_count FROM notifications WHERE id_user = %s AND is_read = FALSE",
+        (id_user,),
+        fetch=True
+    )
+    return result[0]['unread_count'] if result else 0
+
 

@@ -87,7 +87,10 @@ async def login_for_access_token(request: Request, response: Response):
 
     if not result:
         print("401 ERROR: Usuario no encontrado o result vacío.")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales invalidas")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Correo electrónico no registrado o credenciales inválidas"
+        )
 
     user = result[0]
 
@@ -98,13 +101,19 @@ async def login_for_access_token(request: Request, response: Response):
         )
         if not is_valid_password:
             print("401 ERROR: La contraseña es inválida tras verificación.")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales invalidas")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="La contraseña es incorrecta. Por favor, inténtalo de nuevo."
+            )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error al verificar contrasena para {email}: {str(e)}")
         print(f"401 ERROR EXCEPTION: Falló la verificación de contraseña para {email}. Error: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales invalidas")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Error al validar la contraseña. Por favor, intenta más tarde."
+        )
 
     if upgraded_hash:
         try:
@@ -146,6 +155,15 @@ async def login_for_access_token(request: Request, response: Response):
     except Exception as e:
         print(f"DEBUG ERROR: Al obtener empresas - {str(e)}")
         companies = []
+
+    # Insert login notification
+    try:
+        run_query(
+            "INSERT INTO notifications (id_user, title, message, type) VALUES (%s, %s, %s, %s)",
+            (user["id_user"], "Bienvenido", f"Bienvenido {user['name']} {user['lastname']}".strip(), "info")
+        )
+    except Exception as e:
+        logger.error(f"Error creating login notification: {e}")
 
     return {
         "access_token": token,
@@ -226,6 +244,16 @@ def register_user(data: RegisterRequest):
         "INSERT INTO user_company (id_user, id_company) VALUES (%s, %s)",
         (id_user, id_company)
     )
+
+    # Notificación de bienvenida (owner/management)
+    try:
+        run_query(
+            "INSERT INTO notifications (id_user, title, message, type) VALUES (%s, %s, %s, %s)",
+            (id_user, "Bienvenido", f"Bienvenido {name}, ahora podras empezar a analisar tus campañas digitales", "system")
+        )
+    except Exception as e:
+        logger.error(f"Error creating welcome notification: {e}")
+
 
     token = create_access_token({"sub": email, "id_user": id_user})
 
