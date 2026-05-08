@@ -1,4 +1,8 @@
 import os
+from app.config import load_env_file
+
+# Cargar variables de entorno antes de importar cualquier otro módulo de la aplicación
+load_env_file()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
