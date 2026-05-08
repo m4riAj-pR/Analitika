@@ -16,6 +16,156 @@ from app.schemas.clicks import Click
 from app.schemas.conversions import Conversion
 from app.security import hash_password, is_bcrypt_hash
 
+# ---------------------------------------------------------------
+# NOTIFICATIONS & ANALYSIS
+# ---------------------------------------------------------------
+
+def get_user_notifications(id_user: int):
+    """
+    Retorna las notificaciones del usuario, ordenadas por fecha descendente.
+    """
+    return run_query(
+        "SELECT id_notification, title, message, type, is_read, created_at FROM notifications WHERE id_user=%s ORDER BY created_at DESC",
+        (id_user,), fetch=True
+    )
+
+def mark_notification_read(id_notification: int):
+    """
+    Marca una notificación como leída.
+    """
+    run_query("UPDATE notifications SET is_read=1 WHERE id_notification=%s", (id_notification,))
+
+def generate_auto_recommendations(id_user: int):
+    """
+    Motor de análisis de campañas de marketing digital siguiendo reglas de umbrales.
+    """
+    company_ids = get_user_company_ids(id_user)
+    if not company_ids: return
+    
+    in_clause, params = build_in_clause(company_ids)
+    
+    campañas = run_query(f"""
+        SELECT c.id_campaign, c.name, c.spent, c.id_company
+        FROM campaigns c
+        WHERE c.id_company IN {in_clause} AND c.status = 'active'
+    """, params, fetch=True)
+    
+    for camp in campañas:
+        cid = camp['id_campaign']
+        stats = run_query("""
+            SELECT 
+                COUNT(ck.id_click) as clics,
+                COALESCE(SUM(cv.revenue), 0) as ingresos,
+                COUNT(cv.id_conversion) as conversiones
+            FROM tracking_links tl
+            LEFT JOIN clicks ck ON tl.id_link = ck.id_link AND ck.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            LEFT JOIN conversions cv ON ck.id_click = cv.id_click
+            WHERE tl.id_campaign = %s
+        """, (cid,), fetch=True)[0]
+        
+        clics = stats['clics'] or 0
+        ingresos = float(stats['ingresos'] or 0)
+        conversiones = stats['conversiones'] or 0
+        spent = float(camp['spent'] or 0)
+        
+        clics_prev = run_query("""
+            SELECT COUNT(ck.id_click) as clics
+            FROM tracking_links tl
+            JOIN clicks ck ON tl.id_link = ck.id_link
+            WHERE tl.id_campaign = %s 
+              AND ck.created_at BETWEEN DATE_SUB(NOW(), INTERVAL 14 DAY) AND DATE_SUB(NOW(), INTERVAL 7 DAY)
+        """, (cid,), fetch=True)[0]['clics'] or 0
+
+        cpc = (spent / clics) if clics > 0 else 0
+        cr = (conversiones / clics * 100) if clics > 0 else 0
+        roi_pesos = ingresos - spent
+        growth = ((clics - clics_prev) / clics_prev * 100) if clics_prev > 0 else (0 if clics == 0 else 100)
+
+        alertas = []
+        analisis = []
+
+        if roi_pesos < 0:
+            nivel_roi = "CRÍTICO"
+            alertas.append(f"ROI CRÍTICO en '{camp['name']}': Pérdida de ${abs(round(roi_pesos))}.")
+            msg_roi = "Pausa anuncios de alto CPC, revisa landing y audita público."
+        elif roi_pesos <= 50000:
+            nivel_roi = "BAJO"
+            msg_roi = "Inversión recuperada, margen mínimo. Optimiza palabras clave y A/B testing."
+        elif roi_pesos <= 200000:
+            nivel_roi = "ACEPTABLE"
+            msg_roi = "Hay ganancia, espacio de mejora. Escala mejores anuncios y haz remarketing."
+        elif roi_pesos <= 500000:
+            nivel_roi = "BUENO"
+            msg_roi = "Campaña rentable. Escala presupuesto 20-30% semanal."
+        else:
+            nivel_roi = "EXCELENTE"
+            msg_roi = "Alto rendimiento. Escala agresivamente y automatiza pujas."
+        analisis.append(f"ROI: {nivel_roi} (${round(roi_pesos)}). {msg_roi}")
+
+        if cpc > 3000:
+            nivel_cpc = "CRÍTICO"
+            alertas.append(f"CPC CRÍTICO: ${round(cpc)} por clic.")
+            msg_cpc = "Pausa campaña, audita segmentación o cambia de canal."
+        elif cpc > 1500:
+            nivel_cpc = "ALTO"
+            msg_cpc = "Refina segmentación y agrega palabras clave negativas."
+        elif cpc >= 500:
+            nivel_cpc = "ACEPTABLE"
+            msg_cpc = "Mejora Quality Score y prueba otros horarios."
+        else:
+            nivel_cpc = "EFICIENTE"
+            msg_cpc = "Mantén segmentación y escala volumen."
+        analisis.append(f"CPC: {nivel_cpc} (${round(cpc)}). {msg_cpc}")
+
+        if cr < 1:
+            nivel_cr = "CRÍTICO"
+            alertas.append(f"TASA CONV. CRÍTICA: {round(cr, 2)}%.")
+            msg_cr = "Audita landing page, instala mapas de calor y simplifica compra."
+        elif cr < 3:
+            nivel_cr = "BAJO"
+            msg_cr = "Simplifica proceso, agrega prueba social y propuesta de valor."
+        elif cr < 5:
+            nivel_cr = "ACEPTABLE"
+            msg_cr = "Haz A/B testing de titulares y diferentes CTAs."
+        elif cr <= 10:
+            nivel_cr = "BUENO"
+            msg_cr = "Escala tráfico y documenta éxitos."
+        else:
+            nivel_cr = "EXCELENTE"
+            msg_cr = "Maximiza tráfico y aumenta ticket promedio."
+        analisis.append(f"Conv: {nivel_cr} ({round(cr, 2)}%). {msg_cr}")
+
+        if growth <= 0:
+            nivel_growth = "ESTANCADO"
+            alertas.append(f"CRECIMIENTO ESTANCADO: {round(growth, 1)}%.")
+            msg_growth = "Rota creativos, amplía segmentación y sube puja."
+        elif growth <= 5:
+            nivel_growth = "LENTO"
+            msg_growth = "Prueba nuevos copies y audiencias lookalike."
+        else:
+            nivel_growth = "SALUDABLE"
+            msg_growth = "Estrategia sólida. Monitorea que el CPC no suba."
+        analisis.append(f"Crecimiento: {nivel_growth} ({round(growth, 1)}%). {msg_growth}")
+
+        if alertas or roi_pesos < 200000:
+            title = f"Análisis: {camp['name']}"
+            priority_msg = "\n".join(alertas) if alertas else ""
+            full_msg = (priority_msg + "\n\n" + "\n".join(analisis)).strip()
+            tipo = 'warning' if (alertas or roi_pesos < 0) else 'recommendation'
+            _create_unique_notification(id_user, title, full_msg, tipo)
+
+def _create_unique_notification(id_user: int, title: str, message: str, type: str):
+    existe = run_query(
+        "SELECT id_notification FROM notifications WHERE id_user=%s AND title=%s AND message=%s AND created_at > DATE_SUB(NOW(), INTERVAL 1 DAY)",
+        (id_user, title, message), fetch=True
+    )
+    if not existe:
+        run_query(
+            "INSERT INTO notifications (id_user, title, message, type) VALUES (%s, %s, %s, %s)",
+            (id_user, title, message, type)
+        )
+
+
 
 # ---------------------------------------------------------------
 # PERSONS
@@ -739,3 +889,22 @@ def read_table(table: str):
     id_col = id_column_map[table]
 
     return run_query(f"SELECT * FROM {table} ORDER BY {id_col}", fetch=True)
+# ---------------------------------------------------------------
+# NOTIFICATIONS
+# ---------------------------------------------------------------
+def get_user_notifications(id_user: int):
+    # Primero generamos recomendaciones automáticas si es necesario
+    generate_auto_recommendations(id_user)
+    
+    return run_query(
+        "SELECT * FROM notifications WHERE id_user = %s ORDER BY created_at DESC LIMIT 50",
+        (id_user,),
+        fetch=True
+    )
+
+def mark_notification_read(id_notification: int):
+    run_query(
+        "UPDATE notifications SET is_read = TRUE WHERE id_notification = %s",
+        (id_notification,)
+    )
+

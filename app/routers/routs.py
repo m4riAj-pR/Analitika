@@ -316,6 +316,7 @@ def get_top_campaigns(limit: int = 5, current_user: dict = Depends(get_current_u
     in_clause, params = build_in_clause(company_ids)
     resultado = run_query(f"""
         SELECT c.id_campaign, c.name, 
+               COUNT(cl.id_click) as clics,
                COALESCE(SUM(cv.revenue), 0) as ingresos,
                c.spent,
                COALESCE(SUM(cv.revenue), 0) - c.spent as beneficio
@@ -325,7 +326,18 @@ def get_top_campaigns(limit: int = 5, current_user: dict = Depends(get_current_u
         LEFT JOIN conversions cv ON cl.id_click = cv.id_click
         WHERE c.id_company IN {in_clause}
         GROUP BY c.id_campaign
-        ORDER BY beneficio DESC
+        ORDER BY clics DESC
         LIMIT %s
     """, (*params, limit), fetch=True)
     return resultado
+
+# NOTIFICATIONS ----------------
+@router.get("/notifications")
+def get_notifications(current_user: dict = Depends(get_current_user)):
+    return get_user_notifications(current_user["id_user"])
+
+@router.put("/notifications/{id}/read")
+def mark_read(id: int, current_user: dict = Depends(get_current_user)):
+    mark_notification_read(id)
+    return {"ok": True}
+

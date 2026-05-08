@@ -206,6 +206,22 @@ CREATE TABLE `conversions` (
   CONSTRAINT `fk_conversion_click` FOREIGN KEY (`id_click`) REFERENCES `clicks` (`id_click`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- -----------------------------------------------------
+-- Table `notifications`
+-- -----------------------------------------------------
+DROP TABLE IF EXISTS `notifications`;
+CREATE TABLE `notifications` (
+  `id_notification` INT NOT NULL AUTO_INCREMENT,
+  `id_user` INT NOT NULL,
+  `title` VARCHAR(150) NOT NULL,
+  `message` TEXT NOT NULL,
+  `is_read` TINYINT(1) DEFAULT '0',
+  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_notification`),
+  CONSTRAINT `fk_notifications_user` FOREIGN KEY (`id_user`) REFERENCES `users` (`id_user`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- Seed initial roles
