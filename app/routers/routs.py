@@ -27,22 +27,26 @@ def root(current_user: dict = Depends(get_current_user)):
 
 @router.post("/persons")
 def create_person(data: Person, current_user: dict = Depends(get_current_user)):
-    insert_person(data)
-    return {"ok": True}
+    id_person = insert_person(data)
+    return {"ok": True, "id_person": id_person}
 
 @router.get("/persons")
 def get_persons(current_user: dict = Depends(get_current_user)):
-    return read_table_for_user("persons", current_user["id_user"])
+    return read_table_for_user("persons", current_user["id_user"], current_user["id_role"])
 
 @router.put("/persons/{id}")
 def update_person(id: int, data: Person, current_user: dict = Depends(get_current_user)):
-    ensure_person_access(current_user["id_user"], id)
+    if current_user["id_role"] == 3:
+        raise HTTPException(status_code=403, detail="Permiso denegado: Manager no puede editar personas")
+    ensure_person_access(current_user["id_user"], id, current_user["id_role"])
     update_person_service(id, data)
     return {"ok": True}
 
 @router.delete("/persons/{id}")
 def delete_person(id: int, current_user: dict = Depends(get_current_user)):
-    ensure_person_access(current_user["id_user"], id)
+    if current_user["id_role"] == 3:
+        raise HTTPException(status_code=403, detail="Permiso denegado: Manager no puede eliminar personas")
+    ensure_person_access(current_user["id_user"], id, current_user["id_role"])
     delete_person_service(id)
     return {"ok": True}
 
@@ -119,17 +123,21 @@ def create_company(data: Company, current_user: dict = Depends(get_current_user)
 
 @router.get("/companies")
 def get_companies(current_user: dict = Depends(get_current_user)):
-    return read_table_for_user("companies", current_user["id_user"])
+    return read_table_for_user("companies", current_user["id_user"], current_user["id_role"])
 
 @router.put("/companies/{id}")
 def update_company(id: int, data: Company, current_user: dict = Depends(get_current_user)):
-    ensure_company_access(current_user["id_user"], id)
+    if current_user["id_role"] == 3:
+        raise HTTPException(status_code=403, detail="Permiso denegado: Manager no puede editar empresas")
+    ensure_company_access(current_user["id_user"], id, current_user["id_role"])
     update_company_service(id, data)
     return {"ok": True}
 
 @router.delete("/companies/{id}")
 def delete_company(id: int, current_user: dict = Depends(get_current_user)):
-    ensure_company_access(current_user["id_user"], id)
+    if current_user["id_role"] != 1:
+        raise HTTPException(status_code=403, detail="Permiso denegado: Solo Super Admin puede eliminar empresas")
+    ensure_company_access(current_user["id_user"], id, current_user["id_role"])
     delete_company_service(id)
     return {"ok": True}
 
@@ -138,14 +146,16 @@ def delete_company(id: int, current_user: dict = Depends(get_current_user)):
 
 @router.post("/users")
 def create_user(data: User, current_user: dict = Depends(get_current_user)):
+    if current_user["id_role"] == 3:
+        raise HTTPException(status_code=403, detail="Permiso denegado: Manager no puede crear usuarios")
     if data.id_company is not None:
-        ensure_company_access(current_user["id_user"], data.id_company)
+        ensure_company_access(current_user["id_user"], data.id_company, current_user["id_role"])
     insert_user(data)
     return {"ok": True}
 
 @router.get("/users")
 def get_users(current_user: dict = Depends(get_current_user)):
-    rows = read_table_for_user("users", current_user["id_user"])
+    rows = read_table_for_user("users", current_user["id_user"], current_user["id_role"])
     return [
         {k: v for k, v in row.items() if k != "password_hash"}
         for row in rows
@@ -153,14 +163,18 @@ def get_users(current_user: dict = Depends(get_current_user)):
 
 @router.put("/users/{id}")
 def update_user(id: int, data: User, current_user: dict = Depends(get_current_user)):
+    if current_user["id_role"] == 3:
+        raise HTTPException(status_code=403, detail="Permiso denegado: Manager no puede editar usuarios")
     if data.id_company is not None:
-        ensure_company_access(current_user["id_user"], data.id_company)
+        ensure_company_access(current_user["id_user"], data.id_company, current_user["id_role"])
     update_user_service(id, data)
     return {"ok": True}
 
 @router.delete("/users/{id}")
 def delete_user(id: int, current_user: dict = Depends(get_current_user)):
-    ensure_user_access(current_user["id_user"], id)
+    if current_user["id_role"] == 3:
+        raise HTTPException(status_code=403, detail="Permiso denegado: Manager no puede eliminar usuarios")
+    ensure_user_access(current_user["id_user"], id, current_user["id_role"])
     delete_user_service(id)
     return {"ok": True}
 
@@ -188,23 +202,25 @@ def delete_user_company(id: int, current_user: dict = Depends(get_current_user))
 
 @router.post("/campaigns")
 def create_campaign(data: Campaign, current_user: dict = Depends(get_current_user)):
-    ensure_company_access(current_user["id_user"], data.id_company)
+    ensure_company_access(current_user["id_user"], data.id_company, current_user["id_role"])
     id_campaign = insert_campaign(data)
     return {"ok": True, "id_campaign": id_campaign}
 
 @router.get("/campaigns")
 def get_campaigns(current_user: dict = Depends(get_current_user)):
-    return read_table_for_user("campaigns", current_user["id_user"])
+    return read_table_for_user("campaigns", current_user["id_user"], current_user["id_role"])
 
 @router.put("/campaigns/{id}")
 def update_campaign(id: int, data: Campaign, current_user: dict = Depends(get_current_user)):
-    ensure_campaign_access(current_user["id_user"], id)
+    ensure_campaign_access(current_user["id_user"], id, current_user["id_role"])
     update_campaign_service(id, data)
     return {"ok": True}
 
 @router.delete("/campaigns/{id}")
 def delete_campaign(id: int, current_user: dict = Depends(get_current_user)):
-    ensure_campaign_access(current_user["id_user"], id)
+    if current_user["id_role"] == 3:
+        raise HTTPException(status_code=403, detail="Permiso denegado: Manager no puede eliminar campañas")
+    ensure_campaign_access(current_user["id_user"], id, current_user["id_role"])
     delete_campaign_service(id)
     return {"ok": True}
 
@@ -235,23 +251,25 @@ def delete_channel(id: int, current_user: dict = Depends(get_current_user)):
 
 @router.post("/tracking-links")
 def create_tracking_link(data: TrackingLink, current_user: dict = Depends(get_current_user)):
-    ensure_campaign_access(current_user["id_user"], data.id_campaign)
+    ensure_campaign_access(current_user["id_user"], data.id_campaign, current_user["id_role"])
     id_link = insert_tracking_link(data)
     return {"ok": True, "id_link": id_link}
 
 @router.get("/tracking-links")
 def get_tracking_links(current_user: dict = Depends(get_current_user)):
-    return read_table_for_user("tracking_links", current_user["id_user"])
+    return read_table_for_user("tracking_links", current_user["id_user"], current_user["id_role"])
 
 @router.put("/tracking-links/{id}")
 def update_tracking_link(id: int, data: TrackingLink, current_user: dict = Depends(get_current_user)):
-    ensure_tracking_link_access(current_user["id_user"], id)
+    ensure_tracking_link_access(current_user["id_user"], id, current_user["id_role"])
     update_tracking_link_service(id, data)
     return {"ok": True}
 
 @router.delete("/tracking-links/{id}")
 def delete_tracking_link(id: int, current_user: dict = Depends(get_current_user)):
-    ensure_tracking_link_access(current_user["id_user"], id)
+    if current_user["id_role"] == 3:
+        raise HTTPException(status_code=403, detail="Permiso denegado: Manager no puede eliminar links")
+    ensure_tracking_link_access(current_user["id_user"], id, current_user["id_role"])
     delete_tracking_link_service(id)
     return {"ok": True}
 
@@ -260,23 +278,25 @@ def delete_tracking_link(id: int, current_user: dict = Depends(get_current_user)
 
 @router.post("/clicks")
 def create_click(data: Click, current_user: dict = Depends(get_current_user)):
-    ensure_tracking_link_access(current_user["id_user"], data.id_link)
+    ensure_tracking_link_access(current_user["id_user"], data.id_link, current_user["id_role"])
     insert_click(data)
     return {"ok": True}
 
 @router.get("/clicks")
 def get_clicks(current_user: dict = Depends(get_current_user)):
-    return read_table_for_user("clicks", current_user["id_user"])
+    return read_table_for_user("clicks", current_user["id_user"], current_user["id_role"])
 
 @router.put("/clicks/{id}")
 def update_click(id: int, data: Click, current_user: dict = Depends(get_current_user)):
-    ensure_click_access(current_user["id_user"], id)
+    ensure_click_access(current_user["id_user"], id, current_user["id_role"])
     update_click_service(id, data)
     return {"ok": True}
 
 @router.delete("/clicks/{id}")
 def delete_click(id: int, current_user: dict = Depends(get_current_user)):
-    ensure_click_access(current_user["id_user"], id)
+    if current_user["id_role"] == 3:
+        raise HTTPException(status_code=403, detail="Permiso denegado")
+    ensure_click_access(current_user["id_user"], id, current_user["id_role"])
     delete_click_service(id)
     return {"ok": True}
 
@@ -285,23 +305,25 @@ def delete_click(id: int, current_user: dict = Depends(get_current_user)):
 
 @router.post("/conversions")
 def create_conversion(data: Conversion, current_user: dict = Depends(get_current_user)):
-    ensure_click_access(current_user["id_user"], data.id_click)
+    ensure_click_access(current_user["id_user"], data.id_click, current_user["id_role"])
     insert_conversion(data)
     return {"ok": True}
 
 @router.get("/conversions")
 def get_conversions(current_user: dict = Depends(get_current_user)):
-    return read_table_for_user("conversions", current_user["id_user"])
+    return read_table_for_user("conversions", current_user["id_user"], current_user["id_role"])
 
 @router.put("/conversions/{id}")
 def update_conversion(id: int, data: Conversion, current_user: dict = Depends(get_current_user)):
-    ensure_conversion_access(current_user["id_user"], id)
+    ensure_conversion_access(current_user["id_user"], id, current_user["id_role"])
     update_conversion_service(id, data)
     return {"ok": True}
 
 @router.delete("/conversions/{id}")
 def delete_conversion(id: int, current_user: dict = Depends(get_current_user)):
-    ensure_conversion_access(current_user["id_user"], id)
+    if current_user["id_role"] == 3:
+        raise HTTPException(status_code=403, detail="Permiso denegado")
+    ensure_conversion_access(current_user["id_user"], id, current_user["id_role"])
     delete_conversion_service(id)
     return {"ok": True}
 

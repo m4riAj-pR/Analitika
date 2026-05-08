@@ -2,11 +2,11 @@ import json
 import logging
 from urllib.parse import parse_qs
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status, Depends
 
 from app.db.database import run_query
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
-from app.security import create_access_token, hash_password, verify_and_upgrade_password
+from app.security import create_access_token, hash_password, verify_and_upgrade_password, get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Auth"])
@@ -69,12 +69,14 @@ async def login_for_access_token(request: Request, response: Response):
                 u.id_user,
                 u.id_person,
                 u.id_role,
+                r.name as role_name,
                 u.password_hash,
                 p.name,
                 p.lastname,
                 p.email
             FROM persons p
             JOIN users u ON p.id_person = u.id_person
+            JOIN roles r ON u.id_role = r.id_role
             WHERE LOWER(p.email) = LOWER(%s)
             """,
             (email,),
@@ -172,11 +174,70 @@ async def login_for_access_token(request: Request, response: Response):
             "id_user": user["id_user"],
             "id_person": user["id_person"],
             "id_role": user["id_role"],
+            "role_name": user["role_name"],
             "name": f"{user['name']} {user['lastname']}".strip(),
             "email": user["email"],
             "companies": companies,
         },
     }
+
+
+@router.get("/me")
+async def get_me(current_user: dict = Depends(get_current_user)):
+    """Retorna la información del usuario actual desde la base de datos."""
+    try:
+        result = run_query(
+            """
+            SELECT
+                u.id_user,
+                u.id_person,
+                u.id_role,
+                r.name as role_name,
+                p.name,
+                p.lastname,
+                p.email,
+                p.phone
+            FROM persons p
+            JOIN users u ON p.id_person = u.id_person
+            JOIN roles r ON u.id_role = r.id_role
+            WHERE u.id_user = %s
+            """,
+            (current_user["id_user"],),
+            fetch=True
+        )
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+            
+        user = result[0]
+        
+        # Obtener empresas
+        companies_result = run_query(
+            """
+            SELECT c.id_company, c.name
+            FROM companies c
+            JOIN user_company uc ON c.id_company = uc.id_company
+            WHERE uc.id_user = %s
+            """,
+            (user["id_user"],),
+            fetch=True
+        )
+        companies = [{"id_company": c["id_company"], "name": c["name"]} for c in companies_result]
+        
+        return {
+            "id_user": user["id_user"],
+            "id_person": user["id_person"],
+            "id_role": user["id_role"],
+            "role_name": user["role_name"],
+            "first_name": user["name"],
+            "last_name": user["lastname"],
+            "email": user["email"],
+            "phone": user["phone"],
+            "companies": companies,
+        }
+    except Exception as e:
+        logger.error(f"Error in /me: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/register", status_code=201)

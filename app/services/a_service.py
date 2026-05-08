@@ -156,9 +156,10 @@ def _create_unique_notification(id_user: int, title: str, message: str, type: st
 # ---------------------------------------------------------------
 def insert_person(data: Person):
     try:
-        run_query(
+        return run_query(
             "INSERT INTO persons (name, lastname, email, phone) VALUES (%s, %s, %s, %s)",
-            (data.name, data.lastname, data.email, data.phone)
+            (data.name, data.lastname, data.email, data.phone),
+            return_lastrowid=True
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al insertar persona: {e}")
@@ -579,7 +580,12 @@ def build_in_clause(values: list[int]) -> tuple[str, tuple]:
     return f"({placeholders})", tuple(values)
 
 
-def get_user_company_ids(id_user: int) -> list[int]:
+def get_user_company_ids(id_user: int, id_role: int = None) -> list[int]:
+    # Si es Super Admin, retornar todas las empresas
+    if id_role == 1:
+        all_companies = run_query("SELECT id_company FROM companies", fetch=True)
+        return [c["id_company"] for c in all_companies]
+
     # Buscar en tabla intermedia user_company
     rows = run_query(
         "SELECT id_company FROM user_company WHERE id_user=%s",
@@ -601,13 +607,15 @@ def get_user_company_ids(id_user: int) -> list[int]:
     return all_company_ids
 
 
-def ensure_company_access(id_user: int, id_company: int) -> None:
-    company_ids = get_user_company_ids(id_user)
+def ensure_company_access(id_user: int, id_company: int, id_role: int = None) -> None:
+    if id_role == 1: return
+    company_ids = get_user_company_ids(id_user, id_role)
     if id_company not in company_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
 
 
-def ensure_campaign_access(id_user: int, id_campaign: int) -> None:
+def ensure_campaign_access(id_user: int, id_campaign: int, id_role: int = None) -> None:
+    if id_role == 1: return
     result = run_query(
         "SELECT id_company FROM campaigns WHERE id_campaign=%s",
         (id_campaign,),
@@ -615,10 +623,11 @@ def ensure_campaign_access(id_user: int, id_campaign: int) -> None:
     )
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaña no encontrada")
-    ensure_company_access(id_user, result[0]["id_company"])
+    ensure_company_access(id_user, result[0]["id_company"], id_role)
 
 
-def ensure_tracking_link_access(id_user: int, id_link: int) -> None:
+def ensure_tracking_link_access(id_user: int, id_link: int, id_role: int = None) -> None:
+    if id_role == 1: return
     result = run_query(
         """
         SELECT c.id_company
@@ -631,10 +640,11 @@ def ensure_tracking_link_access(id_user: int, id_link: int) -> None:
     )
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tracking link no encontrado")
-    ensure_company_access(id_user, result[0]["id_company"])
+    ensure_company_access(id_user, result[0]["id_company"], id_role)
 
 
-def ensure_click_access(id_user: int, id_click: int) -> None:
+def ensure_click_access(id_user: int, id_click: int, id_role: int = None) -> None:
+    if id_role == 1: return
     result = run_query(
         """
         SELECT c.id_company
@@ -648,10 +658,11 @@ def ensure_click_access(id_user: int, id_click: int) -> None:
     )
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Click no encontrado")
-    ensure_company_access(id_user, result[0]["id_company"])
+    ensure_company_access(id_user, result[0]["id_company"], id_role)
 
 
-def ensure_conversion_access(id_user: int, id_conversion: int) -> None:
+def ensure_conversion_access(id_user: int, id_conversion: int, id_role: int = None) -> None:
+    if id_role == 1: return
     # CORRECCIÓN: conversions NO tiene columna id_campaign directa.
     # Se obtiene id_company a través de clicks → tracking_links → campaigns.
     result = run_query(
@@ -668,11 +679,12 @@ def ensure_conversion_access(id_user: int, id_conversion: int) -> None:
     )
     if not result or result[0]["id_company"] is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversión no encontrada")
-    ensure_company_access(id_user, result[0]["id_company"])
+    ensure_company_access(id_user, result[0]["id_company"], id_role)
 
 
-def ensure_person_access(id_user: int, id_person: int) -> None:
-    company_ids = get_user_company_ids(id_user)
+def ensure_person_access(id_user: int, id_person: int, id_role: int = None) -> None:
+    if id_role == 1: return
+    company_ids = get_user_company_ids(id_user, id_role)
     if not company_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
     in_clause, params = build_in_clause(company_ids)
@@ -691,10 +703,10 @@ def ensure_person_access(id_user: int, id_person: int) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
 
 
-def ensure_user_access(id_user: int, target_user_id: int) -> None:
-    if id_user == target_user_id:
+def ensure_user_access(id_user: int, target_user_id: int, id_role: int = None) -> None:
+    if id_role == 1 or id_user == target_user_id:
         return
-    company_ids = get_user_company_ids(id_user)
+    company_ids = get_user_company_ids(id_user, id_role)
     if not company_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
     in_clause, params = build_in_clause(company_ids)
@@ -712,8 +724,9 @@ def ensure_user_access(id_user: int, target_user_id: int) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
 
 
-def ensure_user_company_access(id_user: int, id_user_company: int) -> None:
-    company_ids = get_user_company_ids(id_user)
+def ensure_user_company_access(id_user: int, id_user_company: int, id_role: int = None) -> None:
+    if id_role == 1: return
+    company_ids = get_user_company_ids(id_user, id_role)
     if not company_ids:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso denegado")
     in_clause, params = build_in_clause(company_ids)
@@ -733,7 +746,7 @@ def ensure_user_company_access(id_user: int, id_user_company: int) -> None:
 # ---------------------------------------------------------------
 # READ TABLE
 # ---------------------------------------------------------------
-def read_table_for_user(table: str, id_user: int):
+def read_table_for_user(table: str, id_user: int, id_role: int = None):
     allowed_tables = {
         "persons", "role", "permissions", "role_has_permissions",
         "companies", "users", "user_company",
@@ -742,8 +755,8 @@ def read_table_for_user(table: str, id_user: int):
     if table not in allowed_tables:
         raise HTTPException(status_code=400, detail=f"Tabla '{table}' no permitida")
 
-    company_ids = get_user_company_ids(id_user)
-    if not company_ids and table in {
+    company_ids = get_user_company_ids(id_user, id_role)
+    if not company_ids and id_role != 1 and table in {
         "persons", "companies", "users", "user_company",
         "campaigns", "tracking_links", "clicks", "conversions"
     }:
@@ -755,17 +768,25 @@ def read_table_for_user(table: str, id_user: int):
     in_clause, params = build_in_clause(company_ids) if company_ids else ("(%s)", tuple())
 
     if table == "companies":
-        return run_query(
-            f"SELECT * FROM companies WHERE id_company IN {in_clause} ORDER BY id_company",
-            params,
-            fetch=True
-        )
+        query = "SELECT * FROM companies"
+        if id_role != 1:
+            query += f" WHERE id_company IN {in_clause}"
+        query += " ORDER BY id_company"
+        return run_query(query, params if id_role != 1 else (), fetch=True)
 
     if table == "users":
+        if id_role == 1:
+            return run_query("""
+                SELECT u.*, p.name, p.lastname, p.email 
+                FROM users u 
+                JOIN persons p ON u.id_person = p.id_person 
+                ORDER BY u.id_user
+            """, fetch=True)
         return run_query(
             f"""
-            SELECT DISTINCT u.*
+            SELECT DISTINCT u.*, p.name, p.lastname, p.email
             FROM users u
+            JOIN persons p ON u.id_person = p.id_person
             JOIN user_company uc ON u.id_user = uc.id_user
             WHERE uc.id_company IN {in_clause}
             ORDER BY u.id_user
@@ -775,6 +796,8 @@ def read_table_for_user(table: str, id_user: int):
         )
 
     if table == "user_company":
+        if id_role == 1:
+            return run_query("SELECT * FROM user_company ORDER BY id_user_company", fetch=True)
         return run_query(
             "SELECT * FROM user_company WHERE id_user = %s ORDER BY id_user_company",
             (id_user,),
@@ -782,6 +805,8 @@ def read_table_for_user(table: str, id_user: int):
         )
 
     if table == "persons":
+        if id_role == 1:
+            return run_query("SELECT * FROM persons ORDER BY id_person", fetch=True)
         return run_query(
             f"""
             SELECT DISTINCT p.*
@@ -796,13 +821,15 @@ def read_table_for_user(table: str, id_user: int):
         )
 
     if table == "campaigns":
-        return run_query(
-            f"SELECT * FROM campaigns WHERE id_company IN {in_clause} ORDER BY id_campaign",
-            params,
-            fetch=True
-        )
+        query = "SELECT * FROM campaigns"
+        if id_role != 1:
+            query += f" WHERE id_company IN {in_clause}"
+        query += " ORDER BY id_campaign"
+        return run_query(query, params if id_role != 1 else (), fetch=True)
 
     if table == "tracking_links":
+        if id_role == 1:
+            return run_query("SELECT * FROM tracking_links ORDER BY id_link", fetch=True)
         return run_query(
             f"""
             SELECT tl.*
@@ -816,6 +843,8 @@ def read_table_for_user(table: str, id_user: int):
         )
 
     if table == "clicks":
+        if id_role == 1:
+            return run_query("SELECT * FROM clicks ORDER BY id_click", fetch=True)
         return run_query(
             f"""
             SELECT ck.*
@@ -830,6 +859,8 @@ def read_table_for_user(table: str, id_user: int):
         )
 
     if table == "conversions":
+        if id_role == 1:
+            return run_query("SELECT * FROM conversions ORDER BY id_conversion", fetch=True)
         return run_query(
             f"""
             SELECT cv.*
