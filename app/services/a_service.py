@@ -516,8 +516,15 @@ def delete_tracking_link_service(id_link: int):
 def insert_click(data: Click):
     try:
         run_query(
-            "INSERT INTO clicks (id_link, ip_address_hash, consent_given, user_agent, referrer, country, clicked_at) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (data.id_link, data.ip_address_hash, data.consent_given, data.user_agent, data.referrer, data.country, data.clicked_at)
+            """INSERT INTO clicks (
+                id_link, ip_address_hash, consent_given, user_agent, referrer, country, 
+                utm_source, utm_medium, utm_campaign, utm_term, utm_content, clicked_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (
+                data.id_link, data.ip_address_hash, data.consent_given, data.user_agent, 
+                data.referrer, data.country, data.utm_source, data.utm_medium, 
+                data.utm_campaign, data.utm_term, data.utm_content, data.clicked_at
+            )
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al insertar click: {e}")
@@ -525,8 +532,15 @@ def insert_click(data: Click):
 def update_click_service(id_click: int, data: Click):
     try:
         run_query(
-            "UPDATE clicks SET id_link=%s, ip_address_hash=%s, consent_given=%s, user_agent=%s, referrer=%s, country=%s, clicked_at=%s WHERE id_click=%s",
-            (data.id_link, data.ip_address_hash, data.consent_given, data.user_agent, data.referrer, data.country, data.clicked_at, id_click)
+            """UPDATE clicks SET 
+                id_link=%s, ip_address_hash=%s, consent_given=%s, user_agent=%s, referrer=%s, country=%s, 
+                utm_source=%s, utm_medium=%s, utm_campaign=%s, utm_term=%s, utm_content=%s, clicked_at=%s 
+            WHERE id_click=%s""",
+            (
+                data.id_link, data.ip_address_hash, data.consent_given, data.user_agent, 
+                data.referrer, data.country, data.utm_source, data.utm_medium, 
+                data.utm_campaign, data.utm_term, data.utm_content, data.clicked_at, id_click
+            )
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al actualizar click: {e}")

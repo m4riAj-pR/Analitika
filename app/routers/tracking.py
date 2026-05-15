@@ -182,7 +182,9 @@ def get_tabla_clics(id_campaign: int, current_user: dict = Depends(get_current_u
             c.user_agent,
             c.utm_source,
             c.utm_medium,
-            c.utm_campaign
+            c.utm_campaign,
+            c.utm_term,
+            c.utm_content
         FROM clicks c
         JOIN tracking_links tl ON c.id_link = tl.id_link
         WHERE tl.id_campaign = %s
@@ -200,7 +202,9 @@ def get_tabla_clics(id_campaign: int, current_user: dict = Depends(get_current_u
             "user_agent": r["user_agent"] or "N/A",
             "utm_source": r["utm_source"] or "N/A",
             "utm_medium": r["utm_medium"] or "N/A",
-            "utm_campaign": r["utm_campaign"] or "N/A"
+            "utm_campaign": r["utm_campaign"] or "N/A",
+            "utm_term": r["utm_term"] or "N/A",
+            "utm_content": r["utm_content"] or "N/A"
         }
         for r in resultado
     ]} 
