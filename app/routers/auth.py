@@ -2,11 +2,12 @@ import json
 import logging
 from urllib.parse import parse_qs
 
-from fastapi import APIRouter, HTTPException, Request, Response, status, Depends
+from fastapi import APIRouter, HTTPException, Request, Response, status, Depends, BackgroundTasks
 
 from app.db.database import run_query
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 from app.security import create_access_token, hash_password, verify_and_upgrade_password, get_current_user
+from app.services.email_service import send_password_reset_email, send_welcome_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Auth"])
@@ -241,7 +242,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 
 
 @router.post("/register", status_code=201)
-def register_user(data: RegisterRequest):
+def register_user(data: RegisterRequest, background_tasks: BackgroundTasks):
     """
     Endpoint publico de registro. No requiere token JWT.
     Recibe: email, password, first_name (opcional), last_name (opcional), phone (opcional).
@@ -306,11 +307,13 @@ def register_user(data: RegisterRequest):
         (id_user, id_company)
     )
 
-    # Notificación de bienvenida (owner/management)
+    # Notificación de bienvenida (Email real + notificación interna)
+    background_tasks.add_task(send_welcome_email, email, name)
+    
     try:
         run_query(
             "INSERT INTO notifications (id_user, title, message, type) VALUES (%s, %s, %s, %s)",
-            (id_user, "Bienvenido", f"Bienvenido {name}, ahora podras empezar a analisar tus campañas digitales", "system")
+            (id_user, "Bienvenido", f"Bienvenido {name}, ahora podras empezar a analisar tus campañas digitales. Te enviamos un correo de bienvenida.", "system")
         )
     except Exception as e:
         logger.error(f"Error creating welcome notification: {e}")
@@ -333,7 +336,7 @@ def register_user(data: RegisterRequest):
 
 
 @router.post("/forgot-password")
-async def forgot_password(request: Request):
+async def forgot_password(request: Request, background_tasks: BackgroundTasks):
     try:
         payload = await request.json()
     except:
@@ -366,22 +369,24 @@ async def forgot_password(request: Request):
         # 3. Actualizar base de datos
         run_query("UPDATE users SET password_hash = %s WHERE id_user = %s", (hashed, user["id_user"]))
         
-        # 4. Notificar al usuario (Mock: imprimimos en consola y enviamos notificación interna)
+        # 4. Notificar al usuario (Email real + notificación interna)
         logger.info(f"PASSWORD RESET REQUESTED for {email}. Temp password: {temp_pass}")
+        
+        # Enviar email en segundo plano para no bloquear la respuesta
+        background_tasks.add_task(send_password_reset_email, email, user["name"], temp_pass)
         
         try:
             run_query(
                 "INSERT INTO notifications (id_user, title, message, type) VALUES (%s, %s, %s, %s)",
-                (user["id_user"], "Restablecimiento de Contraseña", f"Se ha generado una clave temporal: {temp_pass}", "warning")
+                (user["id_user"], "Restablecimiento de Contraseña", f"Se ha generado una clave temporal: {temp_pass}. Se envió a tu correo.", "warning")
             )
         except:
             pass
             
         return {
             "ok": True, 
-            "message": "Si el correo está registrado, se han enviado las instrucciones.",
-            "temp_pass_debug": temp_pass # Solo para propósitos de prueba
+            "message": "Si el correo está registrado, recibirá las instrucciones en breve."
         }
     
     # Respuesta genérica por seguridad
-    return {"ok": True, "message": "Si el correo está registrado, se han enviado las instrucciones."}
+    return {"ok": True, "message": "Si el correo está registrado, recibirá las instrucciones en breve."}
