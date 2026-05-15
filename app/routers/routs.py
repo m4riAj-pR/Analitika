@@ -208,6 +208,17 @@ def create_campaign(data: Campaign, current_user: dict = Depends(get_current_use
     if data.start_date and data.start_date.year < datetime.now().year:
         raise HTTPException(status_code=400, detail="No se pueden crear campañas para años anteriores.")
         
+    # "Firma" de la campaña sin cambios en la DB
+    creator_name = f"{current_user.get('first_name', '')} {current_user.get('last_name', '')}".strip()
+    if not creator_name:
+        creator_name = current_user.get('username', 'Usuario')
+    
+    signature = f"[Creador: {creator_name}]"
+    if data.description:
+        data.description = f"{signature} {data.description}"
+    else:
+        data.description = signature
+
     id_campaign = insert_campaign(data)
     return {"ok": True, "id_campaign": id_campaign}
 

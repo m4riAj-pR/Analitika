@@ -330,3 +330,58 @@ def register_user(data: RegisterRequest):
             "companies": [{"id_company": id_company, "name": company_name}],
         },
     }
+
+
+@router.post("/forgot-password")
+async def forgot_password(request: Request):
+    try:
+        payload = await request.json()
+    except:
+        raise HTTPException(status_code=400, detail="Cuerpo de solicitud inválido")
+        
+    email = payload.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email es requerido")
+        
+    # 1. Buscar usuario por email
+    result = run_query(
+        """
+        SELECT u.id_user, p.name 
+        FROM persons p 
+        JOIN users u ON p.id_person = u.id_person 
+        WHERE LOWER(p.email) = LOWER(%s)
+        """,
+        (email,), fetch=True
+    )
+    
+    if result:
+        user = result[0]
+        # 2. Generar contraseña temporal segura
+        import secrets
+        import string
+        alphabet = string.ascii_letters + string.digits
+        temp_pass = ''.join(secrets.choice(alphabet) for i in range(8))
+        hashed = hash_password(temp_pass)
+        
+        # 3. Actualizar base de datos
+        run_query("UPDATE users SET password_hash = %s WHERE id_user = %s", (hashed, user["id_user"]))
+        
+        # 4. Notificar al usuario (Mock: imprimimos en consola y enviamos notificación interna)
+        logger.info(f"PASSWORD RESET REQUESTED for {email}. Temp password: {temp_pass}")
+        
+        try:
+            run_query(
+                "INSERT INTO notifications (id_user, title, message, type) VALUES (%s, %s, %s, %s)",
+                (user["id_user"], "Restablecimiento de Contraseña", f"Se ha generado una clave temporal: {temp_pass}", "warning")
+            )
+        except:
+            pass
+            
+        return {
+            "ok": True, 
+            "message": "Si el correo está registrado, se han enviado las instrucciones.",
+            "temp_pass_debug": temp_pass # Solo para propósitos de prueba
+        }
+    
+    # Respuesta genérica por seguridad
+    return {"ok": True, "message": "Si el correo está registrado, se han enviado las instrucciones."}

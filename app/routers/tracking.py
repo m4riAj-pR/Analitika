@@ -69,17 +69,32 @@ def landing_campana(id_link: int, request: Request, background_tasks: Background
     ip_address = forwarded.split(",")[0] if forwarded else (request.client.host or "127.0.0.1")
     ip_hash = hashlib.sha256(ip_address.encode()).hexdigest()
 
-    # 2. Registra el clic inicial
+    # 1.1 Capturar parámetros UTM
+    utm_source = request.query_params.get("utm_source")
+    utm_medium = request.query_params.get("utm_medium")
+    utm_campaign = request.query_params.get("utm_campaign")
+    utm_term = request.query_params.get("utm_term")
+    utm_content = request.query_params.get("utm_content")
+
+    # 2. Registra el clic inicial con UTMs
     id_click = run_query("""
-        INSERT INTO clicks (id_link, ip_address_hash, user_agent, referrer, clicked_at)
-        VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO clicks (
+            id_link, ip_address_hash, user_agent, referrer, clicked_at,
+            utm_source, utm_medium, utm_campaign, utm_term, utm_content
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """, (
         id_link,
         ip_hash,
         request.headers.get("user-agent"),
         request.headers.get("referer"),
-        datetime.utcnow()
-    ), fetch=False, return_lastrowid=True) # Necesitamos que run_query devuelva el ID
+        datetime.utcnow(),
+        utm_source,
+        utm_medium,
+        utm_campaign,
+        utm_term,
+        utm_content
+    ), fetch=False, return_lastrowid=True)
 
     # 3. Lanzar geolocalización en segundo plano
     if id_click and ip_address != "127.0.0.1":
@@ -164,7 +179,10 @@ def get_tabla_clics(id_campaign: int, current_user: dict = Depends(get_current_u
             c.clicked_at,
             COALESCE(c.country, 'Desconocido') as pais,
             c.ip_address_hash as ip,
-            c.user_agent
+            c.user_agent,
+            c.utm_source,
+            c.utm_medium,
+            c.utm_campaign
         FROM clicks c
         JOIN tracking_links tl ON c.id_link = tl.id_link
         WHERE tl.id_campaign = %s
@@ -179,7 +197,10 @@ def get_tabla_clics(id_campaign: int, current_user: dict = Depends(get_current_u
             "hora": r["clicked_at"].strftime("%H:%M:%S") if r["clicked_at"] else "N/A",
             "pais": r["pais"],
             "ip": r["ip"][:8] if r["ip"] else "N/A",
-            "user_agent": r["user_agent"] or "N/A"
+            "user_agent": r["user_agent"] or "N/A",
+            "utm_source": r["utm_source"] or "N/A",
+            "utm_medium": r["utm_medium"] or "N/A",
+            "utm_campaign": r["utm_campaign"] or "N/A"
         }
         for r in resultado
     ]} 
