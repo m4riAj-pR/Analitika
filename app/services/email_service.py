@@ -62,6 +62,8 @@ def send_password_reset_email(to_email: str, name: str, temp_pass: str):
         </body>
     </html>
     """
+    return send_email(to_email, subject, body)
+
 def send_welcome_email(to_email: str, name: str):
     subject = "¡Bienvenido a Analitika!"
     body = f"""
