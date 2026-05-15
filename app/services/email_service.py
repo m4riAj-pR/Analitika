@@ -31,9 +31,14 @@ def send_email(to_email: str, subject: str, body: str):
 
         msg.attach(MIMEText(body, 'html'))
 
-        print(f"[SMTP] Conectando a {smtp_host}:{smtp_port}...")
-        server = smtplib.SMTP(smtp_host, int(smtp_port))
-        server.starttls()
+        print(f"[SMTP] Conectando a {smtp_host}:{smtp_port} (Timeout: 15s)...")
+        
+        if smtp_port == "465":
+            server = smtplib.SMTP_SSL(smtp_host, int(smtp_port), timeout=15)
+        else:
+            server = smtplib.SMTP(smtp_host, int(smtp_port), timeout=15)
+            server.starttls()
+            
         server.login(smtp_user, smtp_pass)
         print(f"[SMTP] Enviando mensaje a {to_email}...")
         server.send_message(msg)
@@ -43,6 +48,7 @@ def send_email(to_email: str, subject: str, body: str):
         logger.info(f"Email enviado exitosamente a {to_email}")
         return True
     except Exception as e:
+        print(f"[SMTP ERROR] Falló el envío: {str(e)}")
         logger.error(f"Error enviando email a {to_email}: {e}")
         return False
 
