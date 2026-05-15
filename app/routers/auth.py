@@ -373,6 +373,7 @@ async def forgot_password(request: Request, background_tasks: BackgroundTasks):
         logger.info(f"PASSWORD RESET REQUESTED for {email}. Temp password: {temp_pass}")
         
         # Enviar email en segundo plano para no bloquear la respuesta
+        print(f"[AUTH] Encolando correo de recuperación para: {email}")
         background_tasks.add_task(send_password_reset_email, email, user["name"], temp_pass)
         
         try:

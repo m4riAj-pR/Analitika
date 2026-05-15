@@ -31,11 +31,14 @@ def send_email(to_email: str, subject: str, body: str):
 
         msg.attach(MIMEText(body, 'html'))
 
+        print(f"[SMTP] Conectando a {smtp_host}:{smtp_port}...")
         server = smtplib.SMTP(smtp_host, int(smtp_port))
         server.starttls()
         server.login(smtp_user, smtp_pass)
+        print(f"[SMTP] Enviando mensaje a {to_email}...")
         server.send_message(msg)
         server.quit()
+        print(f"[SMTP] ¡Correo enviado con éxito!")
         
         logger.info(f"Email enviado exitosamente a {to_email}")
         return True
