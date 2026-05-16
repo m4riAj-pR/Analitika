@@ -10,9 +10,63 @@
   <div class="card">
     <h1>{{ nombre }}</h1>
     <p>{{ descripcion }}</p>
-    <a href="https://wa.me/" class="btn">
-      Contáctanos por WhatsApp 💬
+    <!-- Formulario de Intención de Compra -->
+    <div id="conversion-form" style="margin-top: 30px; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 15px; border: 1px solid rgba(255,255,255,0.1);">
+      <h3 style="margin-bottom: 15px; color: white;">¿Te interesa este producto?</h3>
+      <p style="font-size: 0.9em; opacity: 0.8; margin-bottom: 20px; color: white;">Déjanos tus datos y te contactaremos con una oferta especial.</p>
+      
+      <div id="form-content">
+        <input type="text" id="name" placeholder="Tu nombre" style="width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #ddd; background: white; color: #333;">
+        <input type="tel" id="phone" placeholder="WhatsApp / Teléfono" style="width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 8px; border: 1px solid #ddd; background: white; color: #333;">
+        
+        <button onclick="sendConversion()" class="btn" style="width: 100%; border: none; cursor: pointer; background: #6366f1; color: white; padding: 12px; border-radius: 8px; font-weight: bold;">
+          ¡Lo quiero! 🚀
+        </button>
+      </div>
+
+      <div id="success-msg" style="display: none; color: #4ade80; font-weight: bold; text-align: center;">
+        ¡Gracias! Te contactaremos pronto.
+      </div>
+    </div>
+
+    <a href="https://wa.me/" class="btn" style="margin-top: 20px; background: #25D366; opacity: 0.8;">
+      O contáctanos por WhatsApp 💬
     </a>
   </div>
+
+  <script>
+    async function sendConversion() {
+      const name = document.getElementById('name').value;
+      const phone = document.getElementById('phone').value;
+      const currentClickId = Number("{{ id_click or 0 }}") || null;
+
+      if (!name || !phone) {
+        alert("Por favor completa los datos para continuar.");
+        return;
+      }
+
+      try {
+        const response = await fetch('/conversion/public', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id_click: currentClickId,
+            type: 'lead',
+            notes: `Nombre: ${name}, Tel: ${phone}`,
+            revenue: 0.0
+          })
+        });
+
+        if (response.ok) {
+          document.getElementById('form-content').style.display = 'none';
+          document.getElementById('success-msg').style.display = 'block';
+        } else {
+          alert("Hubo un error al procesar tu solicitud.");
+        }
+      } catch (error) {
+        console.error("Error enviando conversión:", error);
+      }
+    }
+  </script>
 </body>
 </html>

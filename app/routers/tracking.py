@@ -102,8 +102,39 @@ def landing_campana(id_link: int, request: Request, background_tasks: Background
 
     # 4. Renderiza el HTML
     template = env.get_template("campana.html")
-    html = template.render(nombre=campana["name"], descripcion=campana["description"])
+    html = template.render(
+        nombre=campana["name"], 
+        descripcion=campana["description"],
+        id_click=id_click
+    )
     return HTMLResponse(content=html)
+
+
+@router.post("/conversion/public")
+async def register_public_conversion(request: Request):
+    try:
+        data = await request.json()
+        id_click = data.get("id_click")
+        revenue = data.get("revenue", 0.0)
+        type_conv = data.get("type", "lead")
+        notes = data.get("notes", "")
+
+        if not id_click:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="id_click es requerido")
+
+        run_query("""
+            INSERT INTO conversions (id_click, revenue, type, notes)
+            VALUES (%s, %s, %s, %s)
+        """, (id_click, revenue, type_conv, notes))
+
+        return {"ok": True}
+    except Exception as e:
+        print(f"Error registrando conversión: {e}")
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail="Error interno al registrar conversión")
+
+
 @router.get("/stats/{id_campaign}")
 def get_metricas(id_campaign: int, current_user: dict = Depends(get_current_user)):
     ensure_campaign_access(current_user["id_user"], id_campaign)
