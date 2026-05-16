@@ -1,61 +1,65 @@
 import os
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import json
+import urllib.request
+import urllib.error
 import logging
 
 logger = logging.getLogger(__name__)
 
 def send_email(to_email: str, subject: str, body: str):
     """
-    Envía un correo electrónico usando SMTP.
-    Requiere las variables de entorno:
-    SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM
+    Envía un correo electrónico usando la API REST de SendGrid.
+    Esto evita bloqueos de puertos SMTP en entornos como Railway Free.
     """
-    smtp_host = os.getenv("SMTP_HOST")
-    smtp_port = os.getenv("SMTP_PORT", "587")
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_pass = os.getenv("SMTP_PASSWORD")
-    smtp_from = os.getenv("SMTP_FROM", smtp_user)
+    api_key = os.getenv("SENDGRID_API_KEY")
+    from_email = os.getenv("SENDGRID_FROM", "analitikaappmovil@gmail.com")
 
-    if not all([smtp_host, smtp_user, smtp_pass]):
-        logger.warning(f"SMTP no configurado. El correo para {to_email} no se envió. Contenido: {body}")
-        print(f"MOCK EMAIL to {to_email}: {subject} - {body}")
+    if not api_key:
+        logger.error("SENDGRID_API_KEY no configurada. No se pudo enviar el correo.")
         return False
+
+    url = "https://api.sendgrid.com/v3/mail/send"
+    
+    data = {
+        "personalizations": [
+            {
+                "to": [{"email": to_email}]
+            }
+        ],
+        "from": {"email": from_email, "name": "Analitika"},
+        "subject": subject,
+        "content": [
+            {
+                "type": "text/html",
+                "value": body
+            }
+        ]
+    }
 
     try:
-        msg = MIMEMultipart()
-        msg['From'] = smtp_from
-        msg['To'] = to_email
-        msg['Subject'] = subject
-
-        msg.attach(MIMEText(body, 'html'))
-
-        logger.info(f"Intentando conexión SMTP a {smtp_host}:{smtp_port}...")
+        req = urllib.request.Request(url)
+        req.add_header("Authorization", f"Bearer {api_key}")
+        req.add_header("Content-Type", "application/json")
         
-        # Intentar conectar con un timeout más corto para detectar problemas de red rápido
-        if smtp_port == "465":
-            server = smtplib.SMTP_SSL(smtp_host, int(smtp_port), timeout=10)
-        else:
-            server = smtplib.SMTP(smtp_host, int(smtp_port), timeout=10)
-            try:
-                server.starttls()
-            except Exception as tls_err:
-                logger.error(f"Error en STARTTLS (posible bloqueo de puerto 587): {tls_err}")
-                server.quit()
+        json_data = json.dumps(data).encode("utf-8")
+        
+        logger.info(f"Enviando correo vía SendGrid API a {to_email}...")
+        
+        with urllib.request.urlopen(req, data=json_data, timeout=15) as response:
+            status = response.getcode()
+            if status in [200, 201, 202]:
+                logger.info(f"¡Correo enviado con éxito vía SendGrid a {to_email}!")
+                return True
+            else:
+                logger.error(f"Error inesperado de SendGrid. Status: {status}")
                 return False
-            
-        server.login(smtp_user, smtp_pass)
-        logger.info(f"Autenticado correctamente. Enviando correo a {to_email}...")
-        server.send_message(msg)
-        server.quit()
-        logger.info(f"¡Correo enviado con éxito a {to_email}!")
-        return True
-    except (smtplib.SMTPConnectError, ConnectionRefusedError, OSError) as net_err:
-        logger.error(f"Error de red al conectar con SMTP ({smtp_host}:{smtp_port}): {net_err}")
+                
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        logger.error(f"Error de API SendGrid ({e.code}): {error_body}")
         return False
     except Exception as e:
-        logger.error(f"Error inesperado enviando email a {to_email}: {e}")
+        logger.error(f"Error inesperado enviando vía SendGrid: {e}")
         return False
 
 def send_password_reset_email(to_email: str, name: str, temp_pass: str):

@@ -29,7 +29,7 @@ def load_env_file(path: str | os.PathLike[str] | None = None) -> None:
             value = value[1:-1]
 
         if key:
-            os.environ.setdefault(key, value)
+            os.environ[key] = value
 
     _ENV_LOADED = True
 
