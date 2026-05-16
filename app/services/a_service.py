@@ -137,6 +137,75 @@ def generate_auto_recommendations(id_user: int):
             full_msg = (priority_msg + "\n\n" + "\n".join(analisis)).strip()
             tipo = 'warning' if (alertas or roi_pesos < 0) else 'recommendation'
             _create_unique_notification(id_user, title, full_msg, tipo)
+        
+        # Alerta de presupuesto
+        check_campaign_budget_alerts(id_user, cid)
+
+def check_campaign_budget_alerts(id_user: int, id_campaign: int):
+    """
+    Verifica si una campaña ha alcanzado el 80% o el 100% de su presupuesto.
+    """
+    camp = run_query(
+        "SELECT name, spent, budget FROM campaigns WHERE id_campaign = %s",
+        (id_campaign,), fetch=True
+    )
+    if not camp: return
+    
+    camp = camp[0]
+    spent = float(camp['spent'] or 0)
+    budget = float(camp['budget'] or 0)
+    
+    if budget <= 0: return
+
+    if spent >= budget:
+        title = "🔴 PRESUPUESTO AGOTADO"
+        msg = f"La campaña '{camp['name']}' ha alcanzado el 100% de su presupuesto (${budget}). Se recomienda pausarla o aumentar los fondos."
+        _create_unique_notification(id_user, title, msg, "error")
+    elif spent >= budget * 0.8:
+        title = "🟡 ALERTA DE PRESUPUESTO"
+        msg = f"La campaña '{camp['name']}' ha consumido el 80% de su presupuesto (${spent}/${budget})."
+        _create_unique_notification(id_user, title, msg, "warning")
+
+def export_conversions_csv_service(id_company: int):
+    """
+    Genera un string en formato CSV con todas las conversiones de una empresa.
+    """
+    conversions = run_query("""
+        SELECT cv.id_conversion, cv.revenue, cv.type, cv.notes, cv.created_at,
+               ck.ip_address_hash as ip, ck.country, ck.utm_source, ck.utm_medium, ck.utm_campaign
+        FROM conversions cv
+        JOIN clicks ck ON cv.id_click = ck.id_click
+        JOIN tracking_links tl ON ck.id_link = tl.id_link
+        WHERE tl.id_campaign IN (SELECT id_campaign FROM campaigns WHERE id_company = %s)
+        ORDER BY cv.created_at DESC
+    """, (id_company,), fetch=True)
+    
+    if not conversions:
+        return "ID,Revenue,Type,Notes,Date,Country,Source,Medium,Campaign\n"
+    
+    import io
+    import csv
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Header
+    writer.writerow(["ID", "Revenue", "Type", "Notes", "Date", "Country", "Source", "Medium", "Campaign"])
+    
+    for c in conversions:
+        writer.writerow([
+            c['id_conversion'],
+            c['revenue'],
+            c['type'],
+            c['notes'],
+            c['created_at'].isoformat() if c['created_at'] else "",
+            c['country'] or "N/A",
+            c['utm_source'] or "N/A",
+            c['utm_medium'] or "N/A",
+            c['utm_campaign'] or "N/A"
+        ])
+    
+    return output.getvalue()
 
 def _create_unique_notification(id_user: int, title: str, message: str, type: str):
     existe = run_query(
@@ -400,8 +469,8 @@ def delete_user_company_service(id_user_company: int):
 def insert_campaign(data: Campaign):
     try:
         return run_query(
-            "INSERT INTO campaigns (id_company, name, description, status, start_date, end_date, spent) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (data.id_company, data.name, data.description, data.status, data.start_date, data.end_date, data.spent),
+            "INSERT INTO campaigns (id_company, name, description, status, start_date, end_date, spent, budget) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            (data.id_company, data.name, data.description, data.status, data.start_date, data.end_date, data.spent, data.budget),
             return_lastrowid=True
         )
     except pymysql.err.IntegrityError as e:
@@ -410,8 +479,8 @@ def insert_campaign(data: Campaign):
 def update_campaign_service(id_campaign: int, data: Campaign):
     try:
         run_query(
-            "UPDATE campaigns SET id_company=%s, name=%s, description=%s, status=%s, start_date=%s, end_date=%s, spent=%s WHERE id_campaign=%s",
-            (data.id_company, data.name, data.description, data.status, data.start_date, data.end_date, data.spent, id_campaign)
+            "UPDATE campaigns SET id_company=%s, name=%s, description=%s, status=%s, start_date=%s, end_date=%s, spent=%s, budget=%s WHERE id_campaign=%s",
+            (data.id_company, data.name, data.description, data.status, data.start_date, data.end_date, data.spent, data.budget, id_campaign)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al actualizar campaña: {e}")

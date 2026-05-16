@@ -27,11 +27,11 @@ def run_migrations():
                 logger.info(f"Migración: Agregando columna {col_name} a la tabla clicks...")
                 run_query(f"ALTER TABLE clicks ADD COLUMN {col_name} {col_type} DEFAULT NULL")
         
-        # 2. Migración para columna 'username' en la tabla 'users' (si fuera necesario en el futuro)
-        # check_username = run_query("SHOW COLUMNS FROM users LIKE 'username'", fetch=True)
-        # if not check_username:
-        #     logger.info("Migración: Agregando columna username a la tabla users...")
-        #     run_query("ALTER TABLE users ADD COLUMN username VARCHAR(100) NOT NULL UNIQUE AFTER id_role")
+        # 3. Migración para columna 'budget' en la tabla 'campaigns'
+        check_budget = run_query("SHOW COLUMNS FROM campaigns LIKE 'budget'", fetch=True)
+        if not check_budget:
+            logger.info("Migración: Agregando columna budget a la tabla campaigns...")
+            run_query("ALTER TABLE campaigns ADD COLUMN budget DECIMAL(10, 2) NOT NULL DEFAULT '0.00' AFTER spent")
 
         logger.info("Verificación de esquema completada exitosamente.")
         

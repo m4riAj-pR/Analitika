@@ -20,3 +20,4 @@ class Campaign(BaseModel):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     spent: Optional[Decimal] = Decimal("0.00")
+    budget: Optional[Decimal] = Decimal("0.00")

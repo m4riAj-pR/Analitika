@@ -350,6 +350,28 @@ def delete_conversion(id: int, current_user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 
+@router.get("/conversions/export/{id_company}")
+def export_conversions(id_company: int, current_user: dict = Depends(get_current_user)):
+    """
+    Exporta las conversiones de una empresa en formato CSV. Solo para Owners y Admins.
+    """
+    if current_user["id_role"] not in [1, 2]:
+        raise HTTPException(status_code=403, detail="Permiso denegado: Solo Owners pueden exportar datos.")
+    
+    ensure_company_access(current_user["id_user"], id_company, current_user["id_role"])
+    
+    csv_data = export_conversions_csv_service(id_company)
+    
+    from fastapi.responses import Response
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=conversiones_empresa_{id_company}.csv"
+        }
+    )
+
+
 # ANALYTICS ----------------
 
 @router.get("/campaigns/top")
