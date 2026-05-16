@@ -85,11 +85,11 @@ async def login_for_access_token(request: Request, response: Response):
         )
 
     except Exception as e:
-        print("LOGIN DB ERROR:", str(e))
+        logger.error(f"LOGIN DB ERROR: {str(e)}")
         raise HTTPException(status_code=500, detail="Database connection failed")
 
     if not result:
-        print("401 ERROR: Usuario no encontrado o result vacío.")
+        logger.warning(f"401 ERROR: Usuario no encontrado o result vacío para el email: {email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Correo electrónico no registrado o credenciales inválidas"
@@ -103,7 +103,7 @@ async def login_for_access_token(request: Request, response: Response):
             user["password_hash"]
         )
         if not is_valid_password:
-            print("401 ERROR: La contraseña es inválida tras verificación.")
+            logger.warning(f"401 ERROR: La contraseña es inválida tras verificación para el usuario: {email}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="La contraseña es incorrecta. Por favor, inténtalo de nuevo."
@@ -112,7 +112,6 @@ async def login_for_access_token(request: Request, response: Response):
         raise
     except Exception as e:
         logger.error(f"Error al verificar contrasena para {email}: {str(e)}")
-        print(f"401 ERROR EXCEPTION: Falló la verificación de contraseña para {email}. Error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Error al validar la contraseña. Por favor, intenta más tarde."
@@ -154,9 +153,9 @@ async def login_for_access_token(request: Request, response: Response):
             fetch=True
         )
         companies = [{"id_company": c["id_company"], "name": c["name"]} for c in companies_result]
-        print(f"DEBUG: Empresas encontradas para user {user['id_user']}: {companies}")
+        logger.debug(f"Empresas encontradas para user {user['id_user']}: {companies}")
     except Exception as e:
-        print(f"DEBUG ERROR: Al obtener empresas - {str(e)}")
+        logger.error(f"Error al obtener empresas: {str(e)}")
         companies = []
 
     # Insert login notification

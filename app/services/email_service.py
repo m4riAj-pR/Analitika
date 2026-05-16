@@ -31,25 +31,31 @@ def send_email(to_email: str, subject: str, body: str):
 
         msg.attach(MIMEText(body, 'html'))
 
-        print(f"[SMTP] Conectando a {smtp_host}:{smtp_port} (Timeout: 15s)...")
+        logger.info(f"Intentando conexión SMTP a {smtp_host}:{smtp_port}...")
         
+        # Intentar conectar con un timeout más corto para detectar problemas de red rápido
         if smtp_port == "465":
-            server = smtplib.SMTP_SSL(smtp_host, int(smtp_port), timeout=15)
+            server = smtplib.SMTP_SSL(smtp_host, int(smtp_port), timeout=10)
         else:
-            server = smtplib.SMTP(smtp_host, int(smtp_port), timeout=15)
-            server.starttls()
+            server = smtplib.SMTP(smtp_host, int(smtp_port), timeout=10)
+            try:
+                server.starttls()
+            except Exception as tls_err:
+                logger.error(f"Error en STARTTLS (posible bloqueo de puerto 587): {tls_err}")
+                server.quit()
+                return False
             
         server.login(smtp_user, smtp_pass)
-        print(f"[SMTP] Enviando mensaje a {to_email}...")
+        logger.info(f"Autenticado correctamente. Enviando correo a {to_email}...")
         server.send_message(msg)
         server.quit()
-        print(f"[SMTP] ¡Correo enviado con éxito!")
-        
-        logger.info(f"Email enviado exitosamente a {to_email}")
+        logger.info(f"¡Correo enviado con éxito a {to_email}!")
         return True
+    except (smtplib.SMTPConnectError, ConnectionRefusedError, OSError) as net_err:
+        logger.error(f"Error de red al conectar con SMTP ({smtp_host}:{smtp_port}): {net_err}")
+        return False
     except Exception as e:
-        print(f"[SMTP ERROR] Falló el envío: {str(e)}")
-        logger.error(f"Error enviando email a {to_email}: {e}")
+        logger.error(f"Error inesperado enviando email a {to_email}: {e}")
         return False
 
 def send_password_reset_email(to_email: str, name: str, temp_pass: str):
