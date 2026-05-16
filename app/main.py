@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.routers import auth, routs, tracking, notifications, admin
+from app.db.migrations import run_migrations
 
 
 def get_cors_origins() -> list[str]:
@@ -25,6 +26,14 @@ app = FastAPI(
 
 
 @app.on_event("startup")
+def startup_event():
+    """Ejecuta tareas iniciales al arrancar la app."""
+    # 1. Validar entorno
+    validate_environment()
+    # 2. Ejecutar migraciones
+    run_migrations()
+
+
 def validate_environment():
     """Valida que todas las variables de entorno críticas estén configuradas."""
     required_vars = {
