@@ -278,8 +278,11 @@ def create_tracking_link(data: TrackingLink, current_user: dict = Depends(get_cu
     return {"ok": True, "id_link": id_link}
 
 @router.get("/tracking-links")
-def get_tracking_links(current_user: dict = Depends(get_current_user)):
-    return read_table_for_user("tracking_links", current_user["id_user"], current_user["id_role"])
+def get_tracking_links(campaign_id: int = None, current_user: dict = Depends(get_current_user)):
+    links = read_table_for_user("tracking_links", current_user["id_user"], current_user["id_role"])
+    if campaign_id is not None:
+        links = [l for l in links if l.get("id_campaign") == campaign_id]
+    return links
 
 @router.put("/tracking-links/{id}")
 def update_tracking_link(id: int, data: TrackingLink, current_user: dict = Depends(get_current_user)):
