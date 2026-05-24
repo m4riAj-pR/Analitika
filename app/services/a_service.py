@@ -243,16 +243,10 @@ def update_person_service(id_person: int, data: Person):
         raise HTTPException(status_code=400, detail=f"Error al actualizar persona: {e}")
 
 def delete_person_service(id_person: int):
-    result = run_query(
-        "SELECT COUNT(*) AS total FROM users WHERE id_person=%s",
-        (id_person,), fetch=True
-    )
-    if result[0]['total'] > 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se puede eliminar la persona: tiene usuarios asociados."
-        )
-    run_query("DELETE FROM persons WHERE id_person=%s", (id_person,))
+    try:
+        run_query("DELETE FROM persons WHERE id_person=%s", (id_person,))
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"No se puede eliminar la persona: {e}")
 
 
 # ---------------------------------------------------------------
@@ -271,16 +265,10 @@ def update_role_service(id_role: int, data: Role):
         raise HTTPException(status_code=400, detail=f"Error al actualizar rol: {e}")
 
 def delete_role_service(id_role: int):
-    result = run_query(
-        "SELECT COUNT(*) AS total FROM users WHERE id_role=%s",
-        (id_role,), fetch=True
-    )
-    if result[0]['total'] > 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se puede eliminar el rol: tiene usuarios asociados."
-        )
-    run_query("DELETE FROM role WHERE id_role=%s", (id_role,))
+    try:
+        run_query("DELETE FROM role WHERE id_role=%s", (id_role,))
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"No se puede eliminar el rol: {e}")
 
 
 # ---------------------------------------------------------------
@@ -305,16 +293,10 @@ def update_permission_service(id_permissions: int, data: Permission):
         raise HTTPException(status_code=400, detail=f"Error al actualizar permiso: {e}")
 
 def delete_permission_service(id_permissions: int):
-    result = run_query(
-        "SELECT COUNT(*) AS total FROM role_has_permissions WHERE id_permission=%s",
-        (id_permissions,), fetch=True
-    )
-    if result[0]['total'] > 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se puede eliminar el permiso: está asignado a uno o más roles."
-        )
-    run_query("DELETE FROM permissions WHERE id_permissions=%s", (id_permissions,))
+    try:
+        run_query("DELETE FROM permissions WHERE id_permissions=%s", (id_permissions,))
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"No se puede eliminar el permiso: {e}")
 
 
 # ---------------------------------------------------------------
@@ -366,20 +348,10 @@ def update_company_service(id_company: int, data: Company):
         raise HTTPException(status_code=400, detail=f"Error al actualizar empresa: {e}")
 
 def delete_company_service(id_company: int):
-    result_users = run_query(
-        "SELECT COUNT(*) AS total FROM users WHERE id_company=%s",
-        (id_company,), fetch=True
-    )
-    result_campaigns = run_query(
-        "SELECT COUNT(*) AS total FROM campaigns WHERE id_company=%s",
-        (id_company,), fetch=True
-    )
-    if result_users[0]['total'] > 0 or result_campaigns[0]['total'] > 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se puede eliminar la empresa: tiene usuarios o campañas asociadas."
-        )
-    run_query("DELETE FROM companies WHERE id_company=%s", (id_company,))
+    try:
+        run_query("DELETE FROM companies WHERE id_company=%s", (id_company,))
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"No se puede eliminar la empresa: {e}")
 
 
 # ---------------------------------------------------------------
@@ -428,20 +400,11 @@ def update_user_service(id_user: int, data: User):
         raise HTTPException(status_code=400, detail=f"Error al actualizar usuario: {e}")
 
 def delete_user_service(id_user: int):
-    # CORRECCIÓN: users NO tiene id_company; verificar a través de user_company
-    result = run_query(
-        """
-        SELECT COUNT(*) AS total FROM campaigns
-        WHERE id_company IN (SELECT id_company FROM user_company WHERE id_user=%s)
-        """,
-        (id_user,), fetch=True
-    )
-    if result[0]['total'] > 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se puede eliminar el usuario: tiene campañas asociadas a su empresa."
-        )
-    run_query("DELETE FROM users WHERE id_user=%s", (id_user,))
+    try:
+        run_query("DELETE FROM companies WHERE id_user=%s", (id_user,))
+        run_query("DELETE FROM users WHERE id_user=%s", (id_user,))
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"No se puede eliminar el usuario: {e}")
 
 
 # ---------------------------------------------------------------
@@ -486,28 +449,10 @@ def update_campaign_service(id_campaign: int, data: Campaign):
         raise HTTPException(status_code=400, detail=f"Error al actualizar campaña: {e}")
 
 def delete_campaign_service(id_campaign: int):
-    result_links = run_query(
-        "SELECT COUNT(*) AS total FROM tracking_links WHERE id_campaign=%s",
-        (id_campaign,), fetch=True
-    )
-    # CORRECCIÓN: conversions NO tiene columna id_campaign directa.
-    # Se verifica a través de clicks → tracking_links → campaigns.
-    result_conversions = run_query(
-        """
-        SELECT COUNT(*) AS total
-        FROM conversions cv
-        JOIN clicks ck ON cv.id_click = ck.id_click
-        JOIN tracking_links tl ON ck.id_link = tl.id_link
-        WHERE tl.id_campaign = %s
-        """,
-        (id_campaign,), fetch=True
-    )
-    if result_links[0]['total'] > 0 or result_conversions[0]['total'] > 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se puede eliminar la campaña: existen tracking links o conversiones asociadas."
-        )
-    run_query("DELETE FROM campaigns WHERE id_campaign=%s", (id_campaign,))
+    try:
+        run_query("DELETE FROM campaigns WHERE id_campaign=%s", (id_campaign,))
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"No se puede eliminar la campaña: {e}")
 
 
 # ---------------------------------------------------------------
@@ -532,16 +477,10 @@ def update_channel_service(id_channel: int, data: Channel):
         raise HTTPException(status_code=400, detail=f"Error al actualizar canal: {e}")
 
 def delete_channel_service(id_channel: int):
-    result = run_query(
-        "SELECT COUNT(*) AS total FROM tracking_links WHERE id_channel=%s",
-        (id_channel,), fetch=True
-    )
-    if result[0]['total'] > 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se puede eliminar el canal: tiene tracking links asociados."
-        )
-    run_query("DELETE FROM channels WHERE id_channel=%s", (id_channel,))
+    try:
+        run_query("DELETE FROM channels WHERE id_channel=%s", (id_channel,))
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"No se puede eliminar el canal: {e}")
 
 
 # ---------------------------------------------------------------
@@ -567,16 +506,10 @@ def update_tracking_link_service(id_link: int, data: TrackingLink):
         raise HTTPException(status_code=400, detail=f"Error al actualizar tracking link: {e}")
 
 def delete_tracking_link_service(id_link: int):
-    result = run_query(
-        "SELECT COUNT(*) AS total FROM clicks WHERE id_link=%s",
-        (id_link,), fetch=True
-    )
-    if result[0]['total'] > 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se puede eliminar el tracking link: tiene clicks asociados."
-        )
-    run_query("DELETE FROM tracking_links WHERE id_link=%s", (id_link,))
+    try:
+        run_query("DELETE FROM tracking_links WHERE id_link=%s", (id_link,))
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"No se puede eliminar el tracking link: {e}")
 
 
 # ---------------------------------------------------------------
@@ -615,16 +548,10 @@ def update_click_service(id_click: int, data: Click):
         raise HTTPException(status_code=400, detail=f"Error al actualizar click: {e}")
 
 def delete_click_service(id_click: int):
-    result = run_query(
-        "SELECT COUNT(*) AS total FROM conversions WHERE id_click=%s",
-        (id_click,), fetch=True
-    )
-    if result[0]['total'] > 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se puede eliminar el click: tiene conversiones asociadas."
-        )
-    run_query("DELETE FROM clicks WHERE id_click=%s", (id_click,))
+    try:
+        run_query("DELETE FROM clicks WHERE id_click=%s", (id_click,))
+    except pymysql.err.IntegrityError as e:
+        raise HTTPException(status_code=400, detail=f"No se puede eliminar el click: {e}")
 
 
 # ---------------------------------------------------------------
