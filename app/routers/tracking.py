@@ -1,15 +1,16 @@
-from fastapi import APIRouter, Depends, Request, BackgroundTasks
+﻿from fastapi import APIRouter, Depends, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader
 from datetime import datetime
 import json
 import urllib.request
 from app.db.database import run_query
-from app.security import get_current_user
+from app.security import get_current_user, filter_financial_kpis
 from app.services.a_service import ensure_campaign_access
 
 router = APIRouter()
 env = Environment(loader=FileSystemLoader("app/templates"))
+
 
 def get_country_from_ip(ip: str, id_click: int):
     try:
@@ -17,7 +18,7 @@ def get_country_from_ip(ip: str, id_click: int):
         if ip in ["127.0.0.1", "localhost", "::1"]:
             run_query("UPDATE clicks SET country = %s WHERE id_click = %s", ("Colombia", id_click))
             return
-        
+
         # Check para rangos privados
         is_private = False
         if ip.startswith("192.168.") or ip.startswith("10."):
@@ -27,12 +28,13 @@ def get_country_from_ip(ip: str, id_click: int):
                 second_octet = int(ip.split(".")[1])
                 if 16 <= second_octet <= 31:
                     is_private = True
-            except: pass
-            
+            except:
+                pass
+
         if is_private:
             run_query("UPDATE clicks SET country = %s WHERE id_click = %s", ("Colombia", id_click))
             return
-        
+
         with urllib.request.urlopen(f"http://ip-api.com/json/{ip}?fields=status,country", timeout=3) as response:
             data = json.loads(response.read().decode())
             if data.get("status") == "success":
@@ -44,8 +46,10 @@ def get_country_from_ip(ip: str, id_click: int):
         # En caso de error, también ponemos Colombia por defecto
         try:
             run_query("UPDATE clicks SET country = %s WHERE id_click = %s", ("Colombia", id_click))
-        except: pass
+        except:
+            pass
         print(f"Error en geolocalización: {e}")
+
 
 @router.get("/c/{id_link}")
 def landing_campana(id_link: int, request: Request, background_tasks: BackgroundTasks):
@@ -137,7 +141,7 @@ async def register_public_conversion(request: Request):
 
 @router.get("/stats/{id_campaign}")
 def get_metricas(id_campaign: int, current_user: dict = Depends(get_current_user)):
-    ensure_campaign_access(current_user["id_user"], id_campaign)
+    ensure_campaign_access(current_user["id_user"], id_campaign, current_user.get("id_role"))
     # Clics totales
     clics = run_query("""
         SELECT COUNT(c.id_click) as total
@@ -164,7 +168,7 @@ def get_metricas(id_campaign: int, current_user: dict = Depends(get_current_user
     total_clics = clics[0]["total"] or 0
     total_conversiones = conversiones[0]["total"] or 0
     ingresos = float(conversiones[0]["ingresos"] or 0)
-    spent = float(campana[0]["spent"] or 0)
+    spent = float(campana[0]["spent"] or 0) if campana else 0.0
 
     cpc = round(spent / total_clics, 2) if total_clics > 0 else 0
     cpa = round(spent / total_conversiones, 2) if total_conversiones > 0 else 0
@@ -174,7 +178,7 @@ def get_metricas(id_campaign: int, current_user: dict = Depends(get_current_user
     conversion_rate = round((total_conversiones / total_clics) * 100, 2) if total_clics > 0 else 0
     aov = round(ingresos / total_conversiones, 2) if total_conversiones > 0 else 0
 
-    return {
+    metricas = {
         "clics": total_clics,
         "conversiones": total_conversiones,
         "ingresos": ingresos,
@@ -186,9 +190,14 @@ def get_metricas(id_campaign: int, current_user: dict = Depends(get_current_user
         "conversion_rate": conversion_rate,
         "aov": aov
     }
+
+    # Filtrar campos financieros para Manager
+    return filter_financial_kpis(metricas, current_user)
+
+
 @router.get("/stats/{id_campaign}/clics-por-dia")
 def get_clics_por_dia(id_campaign: int, current_user: dict = Depends(get_current_user)):
-    ensure_campaign_access(current_user["id_user"], id_campaign)
+    ensure_campaign_access(current_user["id_user"], id_campaign, current_user.get("id_role"))
     resultado = run_query("""
         SELECT DATE(c.clicked_at) as fecha, COUNT(c.id_click) as clics
         FROM clicks c
@@ -202,9 +211,11 @@ def get_clics_por_dia(id_campaign: int, current_user: dict = Depends(get_current
         {"fecha": str(r["fecha"]), "clics": r["clics"]}
         for r in resultado
     ]}
+
+
 @router.get("/stats/{id_campaign}/tabla-clics")
 def get_tabla_clics(id_campaign: int, current_user: dict = Depends(get_current_user)):
-    ensure_campaign_access(current_user["id_user"], id_campaign)
+    ensure_campaign_access(current_user["id_user"], id_campaign, current_user.get("id_role"))
     resultado = run_query("""
         SELECT 
             c.clicked_at,
@@ -238,5 +249,4 @@ def get_tabla_clics(id_campaign: int, current_user: dict = Depends(get_current_u
             "utm_content": r["utm_content"] or "N/A"
         }
         for r in resultado
-    ]} 
-    
+    ]}

@@ -3,6 +3,7 @@ import logging
 import os
 import re
 from datetime import datetime, timedelta, timezone
+from typing import Any, Callable
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -141,3 +142,50 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
         "name": f"{user['name']} {user['lastname']}".strip(),
         "email": user["email"],
     }
+
+
+def require_role(allowed_roles: list[int]) -> Callable:
+    """
+    Dependencia parametrizable de FastAPI para control de acceso basado en roles (RBAC).
+    Valida que el usuario autenticado posea uno de los roles autorizados en allowed_roles.
+    Si el rol no esta autorizado, responde con HTTP 403 Forbidden.
+    """
+    def role_checker(current_user: dict = Depends(get_current_user)) -> dict:
+        user_role = current_user.get("id_role")
+        if user_role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acceso denegado: Privilegios insuficientes para este recurso"
+            )
+        return current_user
+
+    return role_checker
+
+
+FINANCIAL_KEYS = {"ingresos", "roi", "roas", "cpc", "cpa", "beneficio", "revenue", "spent"}
+
+
+def filter_financial_kpis(data: Any, user_or_role: dict | int | None) -> Any:
+    """
+    Filtra y excluye los campos financieros (Ingresos, ROI, ROAS, CPC, CPA, beneficio)
+    de las respuestas de metricas/KPIs cuando el usuario tiene rol de Manager (id_role === 3).
+    Asegura que las claves financieras ni siquiera esten presentes en la respuesta JSON.
+    """
+    if data is None:
+        return None
+
+    role_id = user_or_role if isinstance(user_or_role, int) else (
+        user_or_role.get("id_role") if isinstance(user_or_role, dict) else None
+    )
+
+    # Solo se aplica el filtrado para rol Manager (3)
+    if role_id != 3:
+        return data
+
+    if isinstance(data, list):
+        return [filter_financial_kpis(item, role_id) for item in data]
+
+    if isinstance(data, dict):
+        return {k: v for k, v in data.items() if k not in FINANCIAL_KEYS}
+
+    return data

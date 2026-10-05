@@ -1,16 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException, status
 from app.db.database import run_query
-from app.security import get_current_user
+from app.security import require_role
 
-router = APIRouter()
+# Todos los endpoints bajo este router exigen estrictamente rol Super Admin (1)
+router = APIRouter(dependencies=[Depends(require_role([1]))])
 
-def get_super_admin(current_user: dict = Depends(get_current_user)):
-    if current_user["id_role"] != 1:
-        raise HTTPException(status_code=403, detail="Acceso denegado: Se requiere rol Super Admin")
-    return current_user
 
 @router.get("/companies")
-def get_admin_companies(current_user: dict = Depends(get_super_admin)):
+def get_admin_companies():
     """Retorna lista de empresas con conteo de owners y managers."""
     return run_query("""
         SELECT 
@@ -26,8 +23,9 @@ def get_admin_companies(current_user: dict = Depends(get_super_admin)):
         ORDER BY c.name ASC
     """, fetch=True)
 
+
 @router.get("/users-by-role")
-def get_users_by_role(id_company: int = None, current_user: dict = Depends(get_super_admin)):
+def get_users_by_role(id_company: int = None):
     """Retorna usuarios agrupados por rol, opcionalmente filtrados por empresa."""
     where_clause = ""
     params = []
@@ -43,7 +41,7 @@ def get_users_by_role(id_company: int = None, current_user: dict = Depends(get_s
         JOIN user_company uc ON u.id_user = uc.id_user
         WHERE u.id_role = 2{where_clause}
     """
-    
+
     managers_query = f"""
         SELECT u.id_user, p.email, u.id_role, r.name as role_name 
         FROM users u 
@@ -52,21 +50,22 @@ def get_users_by_role(id_company: int = None, current_user: dict = Depends(get_s
         JOIN user_company uc ON u.id_user = uc.id_user
         WHERE u.id_role = 3{where_clause}
     """
-    
+
     owners = run_query(owners_query, params, fetch=True)
     managers = run_query(managers_query, params, fetch=True)
-    
+
     return {
         "owners": owners,
         "managements": managers
     }
 
+
 @router.put("/users/{id_user}/role")
-def update_user_role(id_user: int, payload: dict, current_user: dict = Depends(get_super_admin)):
+def update_user_role(id_user: int, payload: dict):
     """Actualiza el rol de un usuario."""
     new_role = payload.get("id_role")
     if new_role not in [1, 2, 3]:
         raise HTTPException(status_code=400, detail="Rol inválido")
-    
+
     run_query("UPDATE users SET id_role = %s WHERE id_user = %s", (new_role, id_user))
     return {"message": "Rol actualizado correctamente"}
