@@ -1,17 +1,12 @@
 import os
-import logging
 from app.config import load_env_file
 
 # Cargar variables de entorno antes de importar cualquier otro módulo de la aplicación
 load_env_file()
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 
 from app.routers import auth, routs, tracking, notifications, admin
 from app.db.migrations import run_migrations
@@ -23,36 +18,11 @@ def get_cors_origins() -> list[str]:
     return origins or ["*"]
 
 
-# ---------------------------------------------------------------------------
-# Rate Limiter (slowapi) — usado en endpoints públicos de tracking
-# ---------------------------------------------------------------------------
-_rate_limit_logger = logging.getLogger("analitika.ratelimit")
-
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
-
-
-async def _custom_rate_limit_handler(request: Request, exc: RateLimitExceeded):
-    """Handler de 429 con logging para análisis de patrones de abuso."""
-    _rate_limit_logger.warning(
-        "Rate limit superado — ip=%s path=%s limit=%s",
-        request.client.host if request.client else "desconocida",
-        request.url.path,
-        exc.detail,
-    )
-    return JSONResponse(
-        status_code=429,
-        content={"detail": "Demasiadas peticiones. Intenta de nuevo en un momento."},
-    )
-
-
 app = FastAPI(
     title="Analitika API",
     description="API para gestionar campanas digitales",
     version="1.0.0"
 )
-
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _custom_rate_limit_handler)
 
 
 @app.on_event("startup")

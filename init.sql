@@ -228,64 +228,6 @@ CREATE TABLE `notifications` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
--- -----------------------------------------------------
--- Table `ad_account_connections`
--- -----------------------------------------------------
-DROP TABLE IF EXISTS `ad_account_connections`;
-CREATE TABLE `ad_account_connections` (
-  `id_connection` INT NOT NULL AUTO_INCREMENT,
-  `id_company` INT NOT NULL,
-  `provider` ENUM('meta', 'google', 'tiktok') NOT NULL,
-  `external_account_id` VARCHAR(255) NOT NULL,
-  `access_token` TEXT NOT NULL,
-  `refresh_token` TEXT DEFAULT NULL,
-  `token_expires_at` TIMESTAMP NULL DEFAULT NULL,
-  `status` ENUM('active', 'expired', 'revoked', 'error') DEFAULT 'active',
-  `connected_by` INT NOT NULL,
-  `connected_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  `last_sync_at` TIMESTAMP NULL DEFAULT NULL,
-  PRIMARY KEY (`id_connection`),
-  KEY `idx_ad_conn_company` (`id_company`),
-  CONSTRAINT `fk_ad_conn_company` FOREIGN KEY (`id_company`) REFERENCES `companies` (`id_company`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_ad_conn_user` FOREIGN KEY (`connected_by`) REFERENCES `users` (`id_user`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- -----------------------------------------------------
--- Table `campaign_external_mapping`
--- -----------------------------------------------------
-DROP TABLE IF EXISTS `campaign_external_mapping`;
-CREATE TABLE `campaign_external_mapping` (
-  `id_mapping` INT NOT NULL AUTO_INCREMENT,
-  `id_campaign` INT NOT NULL,
-  `id_connection` INT NOT NULL,
-  `external_campaign_id` VARCHAR(255) NOT NULL,
-  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id_mapping`),
-  UNIQUE KEY `uq_campaign_connection` (`id_campaign`, `id_connection`),
-  CONSTRAINT `fk_cem_campaign` FOREIGN KEY (`id_campaign`) REFERENCES `campaigns` (`id_campaign`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_cem_connection` FOREIGN KEY (`id_connection`) REFERENCES `ad_account_connections` (`id_connection`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- -----------------------------------------------------
--- Table `campaign_external_metrics`
--- -----------------------------------------------------
-DROP TABLE IF EXISTS `campaign_external_metrics`;
-CREATE TABLE `campaign_external_metrics` (
-  `id_metric` INT NOT NULL AUTO_INCREMENT,
-  `id_campaign` INT NOT NULL,
-  `id_connection` INT NOT NULL,
-  `metric_date` DATE NOT NULL,
-  `impressions` INT NOT NULL DEFAULT 0,
-  `spend` DECIMAL(10, 2) NOT NULL DEFAULT '0.00',
-  `external_clicks` INT NOT NULL DEFAULT 0,
-  `fetched_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id_metric`),
-  UNIQUE KEY `uq_campaign_conn_date` (`id_campaign`, `id_connection`, `metric_date`),
-  CONSTRAINT `fk_cem_met_campaign` FOREIGN KEY (`id_campaign`) REFERENCES `campaigns` (`id_campaign`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_cem_met_connection` FOREIGN KEY (`id_connection`) REFERENCES `ad_account_connections` (`id_connection`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- Seed initial roles with fixed IDs
@@ -294,5 +236,4 @@ INSERT INTO `roles` (`id_role`, `name`) VALUES
 (2, 'Owner'), 
 (3, 'Manager') 
 ON DUPLICATE KEY UPDATE name=VALUES(name);
-
 
