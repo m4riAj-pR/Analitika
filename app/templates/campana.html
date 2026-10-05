@@ -219,7 +219,7 @@
 
   <script>
     async function sendConversion() {
-      const currentClickId = Number("{{ id_click or 0 }}") || null;
+      const clickToken = "{{ click_token | e }}";
       const btn = document.querySelector('.btn-submit');
       const originalContent = btn.innerHTML;
       
@@ -231,7 +231,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            id_click: currentClickId,
+            click_token: clickToken,
             type: 'interest',
             notes: 'Registro instantáneo (Light Theme)',
             revenue: 0.0
