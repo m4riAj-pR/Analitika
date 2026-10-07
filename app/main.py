@@ -8,8 +8,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import auth, routs, tracking, notifications, admin
+from app.routers import auth, routs, tracking, notifications, admin, ad_connections
 from app.db.migrations import run_migrations
+from app.services.scheduler import start_scheduler, stop_scheduler
 
 
 def get_cors_origins() -> list[str]:
@@ -32,6 +33,18 @@ def startup_event():
     validate_environment()
     # 2. Ejecutar migraciones
     run_migrations()
+    # 3. Arrancar scheduler de sincronización publicitaria
+    try:
+        start_scheduler()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"No se pudo arrancar el scheduler de background: {e}")
+
+
+@app.on_event("shutdown")
+def shutdown_event():
+    """Detiene tareas en segundo plano al apagar la app."""
+    stop_scheduler()
 
 
 def validate_environment():
@@ -67,6 +80,7 @@ app.include_router(tracking.router)
 app.include_router(auth.router)
 app.include_router(notifications.router, prefix="/analitika/notifications", tags=["notifications"])
 app.include_router(admin.router, prefix="/analitika/admin", tags=["admin"])
+app.include_router(ad_connections.router)
 
 
 @app.get("/")

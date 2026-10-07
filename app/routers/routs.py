@@ -396,6 +396,15 @@ def get_top_campaigns(limit: int = 5, current_user: dict = Depends(get_current_u
         LIMIT %s
     """, (*params, limit), fetch=True)
 
+    # Reconciliar spend e impresiones según regla de precedencia
+    for r in resultado:
+        eff_spent, eff_impressions, data_source = get_campaign_effective_spend_and_impressions(r["id_campaign"])
+        r["spent"] = eff_spent
+        r["beneficio"] = float(r["ingresos"] or 0) - eff_spent
+        r["impressions"] = eff_impressions
+        r["data_source"] = data_source
+        r["ctr_real"] = round((r["clics"] / eff_impressions) * 100, 2) if eff_impressions > 0 else 0.0
+
     # Filtrar KPIs financieros para Managers
     return filter_financial_kpis(resultado, current_user)
 

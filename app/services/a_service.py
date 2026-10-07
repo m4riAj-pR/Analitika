@@ -19,6 +19,57 @@ from app.security import hash_password, is_bcrypt_hash
 # NOTIFICATIONS & ANALYSIS logic is at the end of the file
 
 
+def get_campaign_effective_spend_and_impressions(id_campaign: int) -> tuple[float, int, str]:
+    """
+    Regla de Precedencia (Fase 0 - Paso 2.4):
+    1. Si una campaña tiene conexión activa y métricas sincronizadas en `campaign_external_metrics`:
+       - Se toma el gasto y las impresiones más recientes por fecha de la API externa (Meta/Google/TikTok).
+       - Prevalece sobre el campo manual de la campaña.
+       - data_source = 'api_meta' (o nombre del proveedor)
+    2. Si la sincronización no tiene datos, falló o no existe mapeo externo:
+       - Se toma el valor manual de `campaigns.spent` como fallback transparente.
+       - impressions = 0
+       - data_source = 'manual'
+    """
+    try:
+        latest_metrics = run_query("""
+            SELECT 
+                aac.provider,
+                COALESCE(SUM(latest.spend), 0) AS total_spend,
+                COALESCE(SUM(latest.impressions), 0) AS total_impressions,
+                COUNT(latest.id_metric) AS metric_count
+            FROM (
+                SELECT m1.spend, m1.impressions, m1.id_metric, m1.id_mapping
+                FROM campaign_external_metrics m1
+                JOIN (
+                    SELECT id_mapping, metric_date, MAX(id_metric) AS max_id
+                    FROM campaign_external_metrics
+                    GROUP BY id_mapping, metric_date
+                ) m2 ON m1.id_metric = m2.max_id
+            ) latest
+            JOIN campaign_external_mapping cem ON latest.id_mapping = cem.id_mapping
+            JOIN ad_account_connections aac ON cem.id_connection = aac.id_connection
+            WHERE cem.id_campaign = %s AND cem.sync_enabled = 1
+            GROUP BY aac.provider
+        """, (id_campaign,), fetch=True)
+
+        if latest_metrics and latest_metrics[0]["metric_count"] > 0:
+            row = latest_metrics[0]
+            total_spend = float(row["total_spend"] or 0.0)
+            total_impressions = int(row["total_impressions"] or 0)
+            provider = row.get("provider") or "meta"
+            return total_spend, total_impressions, f"api_{provider}"
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Error consultando métricas externas para campaña {id_campaign}: {e}")
+
+    # Fallback al gasto manual en campaigns
+    camp_row = run_query("SELECT spent FROM campaigns WHERE id_campaign = %s", (id_campaign,), fetch=True)
+    manual_spent = float(camp_row[0]["spent"] or 0.0) if camp_row else 0.0
+    return manual_spent, 0, "manual"
+
+
 def generate_auto_recommendations(id_user: int):
     """
     Motor de análisis de campañas de marketing digital siguiendo reglas de umbrales.
@@ -50,7 +101,7 @@ def generate_auto_recommendations(id_user: int):
         clics = stats['clics'] or 0
         ingresos = float(stats['ingresos'] or 0)
         conversiones = stats['conversiones'] or 0
-        spent = float(camp['spent'] or 0)
+        spent, _, _ = get_campaign_effective_spend_and_impressions(cid)
         
         clics_prev = run_query("""
             SELECT COUNT(ck.id_click) as clics
@@ -488,11 +539,43 @@ def delete_channel_service(id_channel: int):
 # ---------------------------------------------------------------
 # TRACKING LINKS
 # ---------------------------------------------------------------
+def build_tracking_destination_with_utms(destination: str, id_campaign: int, id_channel: int | None = None) -> str:
+    """
+    Paso 4 (Consistencia de UTM):
+    Si el destino no contiene parámetros UTM, inyecta automáticamente los UTM estándar
+    (utm_source={canal/meta}, utm_medium=cpc, utm_campaign={id_campaign})
+    para garantizar coherencia con lo que Meta Ads Manager espera recibir.
+    """
+    if not destination or "utm_campaign=" in destination:
+        return destination
+
+    source = "meta"
+    if id_channel:
+        try:
+            ch_row = run_query("SELECT name FROM channels WHERE id_channel = %s", (id_channel,), fetch=True)
+            if ch_row:
+                ch_name = (ch_row[0].get("name") or "").lower()
+                if "google" in ch_name:
+                    source = "google"
+                elif "tiktok" in ch_name:
+                    source = "tiktok"
+                elif any(k in ch_name for k in ("meta", "facebook", "instagram")):
+                    source = "meta"
+                else:
+                    source = ch_name.replace(" ", "_")
+        except Exception:
+            pass
+
+    sep = "&" if "?" in destination else "?"
+    return f"{destination}{sep}utm_source={source}&utm_medium=cpc&utm_campaign={id_campaign}"
+
+
 def insert_tracking_link(data: TrackingLink):
     try:
+        enriched_destination = build_tracking_destination_with_utms(data.destination, data.id_campaign, data.id_channel)
         return run_query(
             "INSERT INTO tracking_links (id_campaign, id_channel, destination) VALUES (%s, %s, %s)",
-            (data.id_campaign, data.id_channel, data.destination),
+            (data.id_campaign, data.id_channel, enriched_destination),
             return_lastrowid=True
         )
     except pymysql.err.IntegrityError as e:
@@ -500,9 +583,10 @@ def insert_tracking_link(data: TrackingLink):
 
 def update_tracking_link_service(id_link: int, data: TrackingLink):
     try:
+        enriched_destination = build_tracking_destination_with_utms(data.destination, data.id_campaign, data.id_channel)
         run_query(
             "UPDATE tracking_links SET id_campaign=%s, id_channel=%s, destination=%s WHERE id_link=%s",
-            (data.id_campaign, data.id_channel, data.destination, id_link)
+            (data.id_campaign, data.id_channel, enriched_destination, id_link)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al actualizar tracking link: {e}")

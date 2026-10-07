@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, Request, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader
 from datetime import datetime
@@ -6,7 +6,7 @@ import json
 import urllib.request
 from app.db.database import run_query
 from app.security import get_current_user, filter_financial_kpis
-from app.services.a_service import ensure_campaign_access
+from app.services.a_service import ensure_campaign_access, get_campaign_effective_spend_and_impressions
 
 router = APIRouter()
 env = Environment(loader=FileSystemLoader("app/templates"))
@@ -160,15 +160,12 @@ def get_metricas(id_campaign: int, current_user: dict = Depends(get_current_user
         WHERE tl.id_campaign = %s
     """, (id_campaign,), fetch=True)
 
-    # Presupuesto invertido
-    campana = run_query("""
-        SELECT spent FROM campaigns WHERE id_campaign = %s
-    """, (id_campaign,), fetch=True)
+    # Presupuesto invertido e impresiones conciliadas según regla de precedencia
+    spent, impressions, data_source = get_campaign_effective_spend_and_impressions(id_campaign)
 
     total_clics = clics[0]["total"] or 0
     total_conversiones = conversiones[0]["total"] or 0
     ingresos = float(conversiones[0]["ingresos"] or 0)
-    spent = float(campana[0]["spent"] or 0) if campana else 0.0
 
     cpc = round(spent / total_clics, 2) if total_clics > 0 else 0
     cpa = round(spent / total_conversiones, 2) if total_conversiones > 0 else 0
@@ -177,12 +174,16 @@ def get_metricas(id_campaign: int, current_user: dict = Depends(get_current_user
     roas = round(ingresos / spent, 2) if spent > 0 else 0
     conversion_rate = round((total_conversiones / total_clics) * 100, 2) if total_clics > 0 else 0
     aov = round(ingresos / total_conversiones, 2) if total_conversiones > 0 else 0
+    ctr_real = round((total_clics / impressions) * 100, 2) if impressions > 0 else 0.0
 
     metricas = {
         "clics": total_clics,
+        "impressions": impressions,
+        "ctr_real": ctr_real,
         "conversiones": total_conversiones,
         "ingresos": ingresos,
         "spent": spent,
+        "data_source": data_source,
         "cpc": cpc,
         "cpa": cpa,
         "roi": roi,
