@@ -73,7 +73,6 @@ async def login_for_access_token(request: Request, response: Response):
                 r.name as role_name,
                 u.password_hash,
                 p.name,
-                p.lastname,
                 p.email
             FROM persons p
             JOIN users u ON p.id_person = u.id_person
@@ -160,9 +159,10 @@ async def login_for_access_token(request: Request, response: Response):
 
     # Insert login notification
     try:
+        user_name = (user.get("name") or "").strip()
         run_query(
             "INSERT INTO notifications (id_user, title, message, type) VALUES (%s, %s, %s, %s)",
-            (user["id_user"], "Bienvenido", f"Bienvenido {user['name']} {user['lastname']}".strip(), "info")
+            (user["id_user"], "Bienvenido", f"Bienvenido {user_name}".strip(), "info")
         )
     except Exception as e:
         logger.error(f"Error creating login notification: {e}")
@@ -175,7 +175,7 @@ async def login_for_access_token(request: Request, response: Response):
             "id_person": user["id_person"],
             "id_role": user["id_role"],
             "role_name": user["role_name"],
-            "name": f"{user['name']} {user['lastname']}".strip(),
+            "name": (user.get("name") or "").strip(),
             "email": user["email"],
             "companies": companies,
         },
@@ -194,7 +194,6 @@ async def get_me(current_user: dict = Depends(get_current_user)):
                 u.id_role,
                 r.name as role_name,
                 p.name,
-                p.lastname,
                 p.email,
                 p.phone
             FROM persons p
@@ -229,8 +228,9 @@ async def get_me(current_user: dict = Depends(get_current_user)):
             "id_person": user["id_person"],
             "id_role": user["id_role"],
             "role_name": user["role_name"],
+            "name": user["name"],
             "first_name": user["name"],
-            "last_name": user["lastname"],
+            "last_name": None,
             "email": user["email"],
             "phone": user["phone"],
             "companies": companies,
@@ -262,13 +262,22 @@ def register_user(data: RegisterRequest, background_tasks: BackgroundTasks):
     if existing:
         raise HTTPException(status_code=400, detail="Este correo ya esta registrado")
 
-    name = getattr(data, "first_name", None) or email.split("@")[0]
-    lastname = getattr(data, "last_name", None) or ""
+    input_name = getattr(data, "name", None)
+    first_name = getattr(data, "first_name", None)
+    last_name = getattr(data, "last_name", None)
+
+    if input_name and input_name.strip():
+        name = input_name.strip()
+    elif first_name or last_name:
+        name = f"{first_name or ''} {last_name or ''}".strip()
+    else:
+        name = email.split("@")[0]
+
     phone = getattr(data, "phone", None) or ""
 
     run_query(
-        "INSERT INTO persons (name, lastname, email, phone) VALUES (%s, %s, %s, %s)",
-        (name, lastname, email, phone)
+        "INSERT INTO persons (name, email, phone) VALUES (%s, %s, %s)",
+        (name, email, phone)
     )
 
     person = run_query(
@@ -327,7 +336,7 @@ def register_user(data: RegisterRequest, background_tasks: BackgroundTasks):
             "id_user": id_user,
             "id_person": id_person,
             "id_role": 2,
-            "name": f"{name} {lastname}".strip(),
+            "name": name,
             "email": email,
             "companies": [{"id_company": id_company, "name": company_name}],
         },

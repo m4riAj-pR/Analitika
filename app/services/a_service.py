@@ -225,9 +225,10 @@ def _create_unique_notification(id_user: int, title: str, message: str, type: st
 # ---------------------------------------------------------------
 def insert_person(data: Person):
     try:
+        full_name = f"{data.name} {data.lastname}".strip() if data.lastname else data.name.strip()
         return run_query(
-            "INSERT INTO persons (name, lastname, email, phone) VALUES (%s, %s, %s, %s)",
-            (data.name, data.lastname, data.email, data.phone),
+            "INSERT INTO persons (name, email, phone) VALUES (%s, %s, %s)",
+            (full_name, data.email, data.phone),
             return_lastrowid=True
         )
     except pymysql.err.IntegrityError as e:
@@ -235,9 +236,10 @@ def insert_person(data: Person):
 
 def update_person_service(id_person: int, data: Person):
     try:
+        full_name = f"{data.name} {data.lastname}".strip() if data.lastname else data.name.strip()
         run_query(
-            "UPDATE persons SET name=%s, lastname=%s, email=%s, phone=%s WHERE id_person=%s",
-            (data.name, data.lastname, data.email, data.phone, id_person)
+            "UPDATE persons SET name=%s, email=%s, phone=%s WHERE id_person=%s",
+            (full_name, data.email, data.phone, id_person)
         )
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"Error al actualizar persona: {e}")
@@ -787,14 +789,14 @@ def read_table_for_user(table: str, id_user: int, id_role: int = None):
     if table == "users":
         if id_role == 1:
             return run_query("""
-                SELECT u.*, p.name, p.lastname, p.email 
+                SELECT u.*, p.name, p.email 
                 FROM users u 
                 JOIN persons p ON u.id_person = p.id_person 
                 ORDER BY u.id_user
             """, fetch=True)
         return run_query(
             f"""
-            SELECT DISTINCT u.*, p.name, p.lastname, p.email
+            SELECT DISTINCT u.*, p.name, p.email
             FROM users u
             JOIN persons p ON u.id_person = p.id_person
             JOIN user_company uc ON u.id_user = uc.id_user

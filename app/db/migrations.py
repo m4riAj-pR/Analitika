@@ -33,6 +33,12 @@ def run_migrations():
             logger.info("Migración: Agregando columna budget a la tabla campaigns...")
             run_query("ALTER TABLE campaigns ADD COLUMN budget DECIMAL(10, 2) NOT NULL DEFAULT '0.00' AFTER spent")
 
+        # 4. Migración para asegurar eliminación de columna 'lastname' en 'persons'
+        check_lastname = run_query("SHOW COLUMNS FROM persons LIKE 'lastname'", fetch=True)
+        if check_lastname:
+            logger.info("Migración: Eliminando columna obsoleta 'lastname' de la tabla persons...")
+            run_query("ALTER TABLE persons DROP COLUMN lastname")
+
         logger.info("Verificación de esquema completada exitosamente.")
         
     except Exception as e:
