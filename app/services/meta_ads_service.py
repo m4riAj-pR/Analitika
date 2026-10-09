@@ -34,9 +34,13 @@ class MetaRateLimitError(MetaApiError):
 
 def get_meta_config() -> Dict[str, str]:
     """Obtiene y valida la configuración requerida de Meta Ads."""
-    app_id = os.getenv("META_APP_ID", "")
-    app_secret = os.getenv("META_APP_SECRET", "")
-    redirect_uri = os.getenv("META_REDIRECT_URI", "http://localhost:8000/analitika/ad-connections/meta/callback")
+    app_id = os.getenv("META_APP_ID", "").strip()
+    app_secret = os.getenv("META_APP_SECRET", "").strip()
+    redirect_uri = os.getenv("META_REDIRECT_URI", "http://localhost:8000/analitika/ad-connections/meta/callback").strip()
+
+    if not app_id or app_id in ("YOUR_META_APP_ID", "tu_app_id"):
+        raise MetaAuthError("El ID de la aplicación de Meta (META_APP_ID) no está configurado o es inválido en las variables de entorno.")
+
     return {
         "app_id": app_id,
         "app_secret": app_secret,
@@ -123,11 +127,15 @@ def _execute_meta_request(url: str, params: Optional[Dict[str, Any]] = None, max
                     backoff *= 2
                     continue
 
-                # Error 190: Token inválido o expirado
-                if err_code == 190:
-                    raise MetaAuthError(f"Token de Meta inválido o expirado: {err_msg}")
+                # Error 190 / 102: Token o App Secret inválido / expirado
+                if err_code in (190, 102):
+                    raise MetaAuthError(f"Token o autorización de Meta inválida/expirada (Código {err_code}): {err_msg}")
 
-                raise MetaApiError(f"Error Meta API ({err_code}): {err_msg}")
+                # Error de App no configurada o modo desarrollo (Subcódigos 1349048, 1349057)
+                if err_subcode in (1349048, 1349057) or err_code == 101:
+                    raise MetaAuthError(f"Aplicación de Meta no configurada o en modo desarrollo. Verifica el App ID y Testers (Código {err_code}, Subcódigo {err_subcode}): {err_msg}")
+
+                raise MetaApiError(f"Error Meta API (Código {err_code}, Subcódigo {err_subcode}): {err_msg}")
 
             return data
 
