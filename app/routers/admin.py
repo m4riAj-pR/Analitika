@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from app.db.database import run_query
 from app.security import require_role
 
@@ -29,34 +29,48 @@ def get_users_by_role(id_company: int = None):
     """Retorna usuarios agrupados por rol, opcionalmente filtrados por empresa."""
     where_clause = ""
     params = []
+    join_type = "LEFT JOIN"
     if id_company:
         where_clause = " AND uc.id_company = %s"
         params = [id_company]
+        join_type = "JOIN"
 
     owners_query = f"""
-        SELECT u.id_user, p.email, u.id_role, r.name as role_name 
+        SELECT DISTINCT u.id_user, p.email, u.id_role, r.name as role_name, uc.id_company
         FROM users u 
         JOIN persons p ON u.id_person = p.id_person 
         JOIN roles r ON u.id_role = r.id_role
-        JOIN user_company uc ON u.id_user = uc.id_user
+        {join_type} user_company uc ON u.id_user = uc.id_user
         WHERE u.id_role = 2{where_clause}
     """
 
     managers_query = f"""
-        SELECT u.id_user, p.email, u.id_role, r.name as role_name 
+        SELECT DISTINCT u.id_user, p.email, u.id_role, r.name as role_name, uc.id_company
         FROM users u 
         JOIN persons p ON u.id_person = p.id_person 
         JOIN roles r ON u.id_role = r.id_role
-        JOIN user_company uc ON u.id_user = uc.id_user
+        {join_type} user_company uc ON u.id_user = uc.id_user
         WHERE u.id_role = 3{where_clause}
+    """
+
+    # Usuarios sin empresa asignada (unassigned)
+    unassigned_query = """
+        SELECT DISTINCT u.id_user, p.email, u.id_role, r.name as role_name, NULL as id_company
+        FROM users u
+        JOIN persons p ON u.id_person = p.id_person
+        JOIN roles r ON u.id_role = r.id_role
+        LEFT JOIN user_company uc ON u.id_user = uc.id_user
+        WHERE uc.id_company IS NULL AND u.id_role != 1
     """
 
     owners = run_query(owners_query, params, fetch=True)
     managers = run_query(managers_query, params, fetch=True)
+    unassigned = run_query(unassigned_query, fetch=True) if not id_company else []
 
     return {
         "owners": owners,
-        "managements": managers
+        "managements": managers,
+        "unassigned": unassigned
     }
 
 

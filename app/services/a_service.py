@@ -453,11 +453,47 @@ def update_user_service(id_user: int, data: User):
         raise HTTPException(status_code=400, detail=f"Error al actualizar usuario: {e}")
 
 def delete_user_service(id_user: int):
+    """
+    Realiza una eliminación física real (Hard Delete) de un usuario en la base de datos,
+    asegurando la limpieza y gestión correcta de dependencias y claves foráneas.
+    """
+    # 1. Verificar si el usuario existe
+    user = run_query("SELECT id_user, id_person, id_role FROM users WHERE id_user=%s", (id_user,), fetch=True)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    id_person = user[0]["id_person"]
+
     try:
-        run_query("DELETE FROM companies WHERE id_user=%s", (id_user,))
-        run_query("DELETE FROM users WHERE id_user=%s", (id_user,))
+        # 2. Desvincular o reasignar referencias con ON DELETE RESTRICT:
+        # a) ad_account_connections.connected_by
+        run_query("UPDATE ad_account_connections SET connected_by = NULL WHERE connected_by = %s", (id_user,))
+        
+        # b) companies donde este usuario sea el creador/dueño registrado en companies.id_user
+        # Se reasigna a NULL o a otro admin para no violar fk_company_user si no se elimina la empresa
+        run_query("UPDATE companies SET id_user = NULL WHERE id_user = %s", (id_user,))
+
+        # c) Desvincular membresías de empresas en user_company
+        run_query("DELETE FROM user_company WHERE id_user = %s", (id_user,))
+
+        # d) Eliminar notificaciones recibidas por el usuario
+        run_query("DELETE FROM notifications WHERE id_user = %s", (id_user,))
+
+        # 3. Eliminar el registro del usuario (Hard Delete)
+        run_query("DELETE FROM users WHERE id_user = %s", (id_user,))
+
+        # 4. Limpiar registro huérfano en persons si ya no tiene otros usuarios asociados
+        remaining = run_query("SELECT id_user FROM users WHERE id_person = %s", (id_person,), fetch=True)
+        if not remaining:
+            run_query("DELETE FROM persons WHERE id_person = %s", (id_person,))
+
     except pymysql.err.IntegrityError as e:
-        raise HTTPException(status_code=400, detail=f"No se puede eliminar el usuario: {e}")
+        logger.error(f"Error de integridad al eliminar usuario {id_user}: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=f"No se pudo completar la eliminación física del usuario: {e}")
+    except Exception as e:
+        logger.error(f"Error inesperado al eliminar usuario {id_user}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error interno al eliminar usuario: {e}")
+
 
 
 # ---------------------------------------------------------------

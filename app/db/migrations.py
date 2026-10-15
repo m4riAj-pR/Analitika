@@ -99,6 +99,29 @@ def run_migrations():
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """)
 
+        # 6. Migración: Permitir NULL en claves foráneas de usuario para soportar eliminación segura
+        try:
+            run_query("ALTER TABLE `companies` MODIFY `id_user` INT NULL DEFAULT NULL")
+        except Exception as e:
+            logger.debug(f"Columna id_user en companies ya permite NULL o error menor: {e}")
+
+        try:
+            run_query("ALTER TABLE `ad_account_connections` MODIFY `connected_by` INT NULL DEFAULT NULL")
+        except Exception as e:
+            logger.debug(f"Columna connected_by en ad_account_connections ya permite NULL o error menor: {e}")
+
+        # 7. Migración: Vincular usuarios huérfanos/no anexados que tengan id_company en tabla users hacia user_company
+        try:
+            run_query("""
+                INSERT IGNORE INTO user_company (id_user, id_company)
+                SELECT u.id_user, u.id_company 
+                FROM users u 
+                LEFT JOIN user_company uc ON u.id_user = uc.id_user AND u.id_company = uc.id_company
+                WHERE u.id_company IS NOT NULL AND uc.id_user_company IS NULL
+            """)
+        except Exception as e:
+            logger.debug(f"Error sincronizando users.id_company con user_company: {e}")
+
         logger.info("Verificación de esquema completada exitosamente.")
         
     except Exception as e:
