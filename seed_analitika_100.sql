@@ -9,8 +9,8 @@ VALUES (999, 'Admin Analitika', 'admin@analitika.com', '+573001234567')
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
 
 INSERT INTO `users` (`id_user`, `id_person`, `id_company`, `id_role`, `username`, `password_hash`, `status`)
-VALUES (999, 999, NULL, 2, 'analitika_owner', '$2b$12$e8YkY.k4X7Z9e1k4Z7Z9e.k4X7Z9e1k4Z7Z9e.k4X7Z9e1k4Z7Z9e', 'active')
-ON DUPLICATE KEY UPDATE `username` = VALUES(`username`);
+VALUES (999, 999, NULL, 2, 'analitika_owner', '$2b$12$55rNZlZJZQaF/ZvYT/1MKeeVm3Jhp2zY4iPwzxZ/B0FVHW20jRRBe', 'active')
+ON DUPLICATE KEY UPDATE `username` = VALUES(`username`), `password_hash` = VALUES(`password_hash`);
 
 INSERT INTO `companies` (`id_company`, `id_user`, `name`)
 VALUES (999, 999, 'Analitika')
