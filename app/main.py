@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import auth, routs, tracking, notifications, admin, ad_connections
+from app.routers import auth, routs, tracking, notifications, admin, ad_connections, predictions
 from app.db.migrations import run_migrations
 from app.services.scheduler import start_scheduler, stop_scheduler
 
@@ -81,6 +81,7 @@ app.include_router(auth.router)
 app.include_router(notifications.router, prefix="/analitika/notifications", tags=["notifications"])
 app.include_router(admin.router, prefix="/analitika/admin", tags=["admin"])
 app.include_router(ad_connections.router)
+app.include_router(predictions.router)
 
 
 @app.get("/")

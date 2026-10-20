@@ -1,0 +1,3 @@
+﻿# app/ml/model_artifacts/.gitkeep
+# Los artefactos .joblib del modelo se almacenan aqui y se commitean al repo.
+# NO excluir *.joblib de este directorio (ver .gitignore).
