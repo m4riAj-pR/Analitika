@@ -60,6 +60,7 @@ from app.ml.feature_engineering import (
     build_features_from_campaign,
     features_to_vector,
 )
+from app.ml.synthetic_generator import generate_synthetic_training_vectors
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -227,49 +228,16 @@ def generate_synthetic_data(n: int = 60, seed: int = 42) -> list[tuple[list[floa
     Genera filas sinteticas para complementar el dataset real cuando es
     insuficiente (<30 campanas reales).
 
-    ADVERTENCIA: Estos datos son FICTICIOS y solo sirven para que el modelo
-    tenga masa critica para entrenarse. Las predicciones sobre datos reales
-    podrian ser menos precisas. Se documenta claramente en los logs y en la
-    respuesta del endpoint.
-
-    Distribucion simulada basada en benchmarks tipicos de marketing digital:
-      - CTR medio ~ 2-4%
-      - Conversion rate medio ~ 1-3%
-      - ROI medio ~ 0.1 a 2.0 (10% a 200%)
-      - Campanas perdedoras (ROI negativo) ~ 30% del total
+    Utiliza el generador econometrico realista con rendimientos decrecientes:
+      - spend_48h segun canal (Meta/Google mas caros que WhatsApp/Email)
+      - clicks_48h funcion de spend_48h con CPC variable + ruido
+      - conversion_rate_48h segun canal + ruido
+      - conversions_48h = clicks_48h * conversion_rate_48h
+      - revenue_48h = conversions_48h * valor_promedio_por_conversion + ruido
+      - roi_7d = relacion no lineal con saturacion de pauta/audiencia y rendimientos decrecientes.
     """
-    rng = random.Random(seed)
-    np_rng = np.random.RandomState(seed)
-
-    records = []
-    for _ in range(n):
-        clicks_48h       = rng.randint(5, 800)
-        conv_rate        = np_rng.beta(2, 50)           # ~3-5% conversion
-        conversions_48h  = max(0, int(clicks_48h * conv_rate))
-        revenue_per_conv = np_rng.lognormal(mean=3.5, sigma=1.0)  # ~30-300 USD
-        revenue_48h      = round(conversions_48h * revenue_per_conv, 2)
-        spend_48h        = round(np_rng.uniform(10, 500), 2)
-        channel_encoded  = rng.randint(0, 6)
-        duration_days    = rng.randint(7, 60)
-        cr_48h           = conversions_48h / clicks_48h if clicks_48h > 0 else 0.0
-
-        # Target: ROI a 7d correlacionado con los features
-        base_roi = (revenue_48h / spend_48h - 1) if spend_48h > 0 else 0.0
-        noise    = np_rng.normal(0, 0.15)
-        roi_7d   = round(base_roi + noise, 4)
-
-        X = [
-            float(clicks_48h),
-            float(conversions_48h),
-            float(revenue_48h),
-            float(cr_48h),
-            float(spend_48h),
-            float(channel_encoded),
-            float(duration_days),
-        ]
-        records.append((X, roi_7d))
-
-    logger.info(f"Generadas {n} filas SINTETICAS de apoyo (seed={seed}).")
+    records = generate_synthetic_training_vectors(n=n, seed=seed)
+    logger.info(f"Generadas {len(records)} filas SINTETICAS de apoyo con rendimientos decrecientes (seed={seed}).")
     return records
 
 

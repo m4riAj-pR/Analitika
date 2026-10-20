@@ -36,6 +36,7 @@ CHANNEL_ENCODING: dict[str, int] = {
     "email":       4,
     "organic":     5,
     "direct":      6,
+    "whatsapp":    7,
     "other":       0,
     "desconocido": 0,
 }
