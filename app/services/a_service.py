@@ -5,7 +5,6 @@ import pymysql
 from app.schemas.persons import Person
 from app.schemas.role import Role
 from app.schemas.permissions import Permission
-from app.schemas.role_has_permissions import RoleHasPermission
 from app.schemas.companies import Company
 from app.schemas.users import User
 from app.schemas.user_company import UserCompany
@@ -350,25 +349,6 @@ def delete_permission_service(id_permissions: int):
         run_query("DELETE FROM permissions WHERE id_permissions=%s", (id_permissions,))
     except pymysql.err.IntegrityError as e:
         raise HTTPException(status_code=400, detail=f"No se puede eliminar el permiso: {e}")
-
-
-# ---------------------------------------------------------------
-# ROLE_HAS_PERMISSIONS
-# ---------------------------------------------------------------
-def insert_role_permission(data: RoleHasPermission):
-    try:
-        run_query(
-            "INSERT INTO role_has_permissions (id_role, id_permission) VALUES (%s, %s)",
-            (data.id_role, data.id_permission)
-        )
-    except pymysql.err.IntegrityError as e:
-        raise HTTPException(status_code=400, detail=f"Error al asignar permiso al rol: {e}")
-
-def delete_role_permission_service(id_role_permission: int):
-    run_query(
-        "DELETE FROM role_has_permissions WHERE id_role_permission=%s",
-        (id_role_permission,)
-    )
 
 
 # ---------------------------------------------------------------
@@ -880,7 +860,7 @@ def ensure_user_company_access(id_user: int, id_user_company: int, id_role: int 
 # ---------------------------------------------------------------
 def read_table_for_user(table: str, id_user: int, id_role: int = None):
     allowed_tables = {
-        "persons", "role", "permissions", "role_has_permissions",
+        "persons", "role", "permissions",
         "companies", "users", "user_company",
         "campaigns", "channels", "tracking_links", "clicks", "conversions"
     }
@@ -894,7 +874,7 @@ def read_table_for_user(table: str, id_user: int, id_role: int = None):
     }:
         return []
 
-    if table in {"role", "permissions", "role_has_permissions", "channels"}:
+    if table in {"role", "permissions", "channels"}:
         return read_table(table)
 
     in_clause, params = build_in_clause(company_ids) if company_ids else ("(%s)", tuple())
@@ -1012,7 +992,7 @@ def read_table_for_user(table: str, id_user: int, id_role: int = None):
 
 def read_table(table: str):
     allowed_tables = {
-        "persons", "role", "permissions", "role_has_permissions",
+        "persons", "role", "permissions",
         "companies", "users", "user_company",
         "campaigns", "channels", "tracking_links", "clicks", "conversions"
     }
@@ -1023,7 +1003,6 @@ def read_table(table: str):
         "persons":               "id_person",
         "role":                  "id_role",
         "permissions":           "id_permissions",
-        "role_has_permissions":  "id_role_permission",
         "companies":             "id_company",
         "users":                 "id_user",
         "user_company":          "id_user_company",

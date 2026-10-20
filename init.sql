@@ -46,22 +46,6 @@ CREATE TABLE `permissions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -----------------------------------------------------
--- Table `role_has_permissions`
--- -----------------------------------------------------
-DROP TABLE IF EXISTS `role_has_permissions`;
-CREATE TABLE `role_has_permissions` (
-  `id_role_permission` INT NOT NULL AUTO_INCREMENT,
-  `id_role` INT NOT NULL,
-  `id_permission` INT NOT NULL,
-  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id_role_permission`),
-  UNIQUE KEY `uq_role_permission` (`id_role`, `id_permission`),
-  CONSTRAINT `fk_rhp_role` FOREIGN KEY (`id_role`) REFERENCES `roles` (`id_role`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_rhp_permission` FOREIGN KEY (`id_permission`) REFERENCES `permissions` (`id_permission`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- -----------------------------------------------------
 -- Table `companies`
 -- -----------------------------------------------------
 DROP TABLE IF EXISTS `companies`;

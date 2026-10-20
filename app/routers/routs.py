@@ -5,7 +5,6 @@ from fastapi.responses import Response
 from app.schemas.persons import Person
 from app.schemas.role import Role
 from app.schemas.permissions import Permission
-from app.schemas.role_has_permissions import RoleHasPermission
 from app.schemas.companies import Company
 from app.schemas.users import User
 from app.schemas.user_company import UserCompany
@@ -100,25 +99,6 @@ def update_permission(id: int, data: Permission, current_user: dict = Depends(re
 @router.delete("/permissions/{id}")
 def delete_permission(id: int, current_user: dict = Depends(require_role([1]))):
     delete_permission_service(id)
-    return {"ok": True}
-
-
-# ROLE_HAS_PERMISSIONS ----------------
-
-@router.post("/role-permissions")
-def create_role_permission(data: RoleHasPermission, current_user: dict = Depends(require_role([1]))):
-    insert_role_permission(data)
-    return {"ok": True}
-
-
-@router.get("/role-permissions")
-def get_role_permissions(current_user: dict = Depends(get_current_user)):
-    return read_table("role_has_permissions")
-
-
-@router.delete("/role-permissions/{id}")
-def delete_role_permission(id: int, current_user: dict = Depends(require_role([1]))):
-    delete_role_permission_service(id)
     return {"ok": True}
 
 
