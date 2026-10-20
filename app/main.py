@@ -39,6 +39,13 @@ def startup_event():
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"No se pudo arrancar el scheduler de background: {e}")
+    # 4. Precargar modelo predictivo ML en memoria (Singleton)
+    try:
+        from app.ml.loader import load_roi_model
+        load_roi_model()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"No se pudo precargar el modelo ML: {e}")
 
 
 @app.on_event("shutdown")
@@ -82,6 +89,9 @@ app.include_router(notifications.router, prefix="/analitika/notifications", tags
 app.include_router(admin.router, prefix="/analitika/admin", tags=["admin"])
 app.include_router(ad_connections.router)
 app.include_router(predictions.router)
+
+from app.api.v1.endpoints.predict import router as predict_v1_router
+app.include_router(predict_v1_router)
 
 
 @app.get("/")
